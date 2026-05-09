@@ -46,6 +46,7 @@ function VisitationTab({ memberId, tenantId, branchId }: { memberId: string, ten
   useEffect(() => {
     const q = query(
       collection(db, 'visitations'),
+      where('tenantId', '==', tenantId),
       where('memberId', '==', memberId),
       orderBy('visitDate', 'desc')
     );

@@ -64,6 +64,10 @@ service cloud.firestore {
       return (!data.keys().hasAny(['tenantId']) || data.tenantId == getTenantId());
     }
 
+    function isValidMemberAttendance(data) {
+      return (!data.keys().hasAny(['tenantId']) || data.tenantId == getTenantId());
+    }
+
     // --- Collection Rules ---
 
     // 1. Users Collection
@@ -158,7 +162,14 @@ service cloud.firestore {
       allow delete: if isSignedIn() && isTenantAdmin(existing().tenantId);
     }
 
-    // 10. Staff Claims (Login support for admin-generated passwords)
+    // 10. Member Attendance Collection
+    match /member_attendance/{docId} {
+      allow get: if isSignedIn() && (belongsToTenant(resource.data.tenantId) || isSuperAdmin());
+      allow list: if isSignedIn() && (resource.data.tenantId == getTenantId() || isSuperAdmin());
+      allow write: if isSignedIn() && (getRole() in ['church-admin', 'pastor', 'worker']) && isValidMemberAttendance(incoming());
+    }
+
+    // 11. Staff Claims (Login support for admin-generated passwords)
     match /staff_claims/{email} {
       allow get: if true; 
       allow create: if isTenantAdmin(incoming().tenantId) || isSuperAdmin();

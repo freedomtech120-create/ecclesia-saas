@@ -127,6 +127,22 @@
         "createdAt": { "type": "string", "format": "date-time" }
       },
       "required": ["tenantId", "branchId", "memberId", "visitDate"]
+    },
+    "MemberAttendance": {
+      "title": "Member Attendance Status",
+      "description": "Detailed attendance status for a specific member in a service.",
+      "type": "object",
+      "properties": {
+        "tenantId": { "type": "string" },
+        "branchId": { "type": "string" },
+        "serviceId": { "type": "string" },
+        "memberId": { "type": "string" },
+        "status": { "type": "string", "enum": ["present", "absent", "sick", "travel"] },
+        "report": { "type": "string" },
+        "recordedBy": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["tenantId", "serviceId", "memberId", "status"]
     }
   },
   "firestore": {
@@ -161,6 +177,10 @@
     "visitations": {
       "schema": "Visitation",
       "description": "Member visitation logs"
+    },
+    "member_attendance": {
+      "schema": "MemberAttendance",
+      "description": "Individual member attendance for specific services"
     }
   }
 }
