@@ -1,0 +1,166 @@
+{
+  "entities": {
+    "Tenant": {
+      "title": "Tenant (Church)",
+      "description": "Represents a church organization which can have multiple branches.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "slug": { "type": "string" },
+        "status": { "type": "string", "enum": ["active", "suspended", "trial"] },
+        "subscriptionTier": { "type": "string", "enum": ["free", "basic", "premium"] },
+        "logoUrl": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "adminId": { "type": "string", "description": "The UID of the Church Administrator" }
+      },
+      "required": ["name", "slug", "adminId"]
+    },
+    "Branch": {
+      "title": "Branch",
+      "description": "A specific location/branch of a church.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "tenantId": { "type": "string" },
+        "name": { "type": "string" },
+        "address": { "type": "string" },
+        "contactEmail": { "type": "string" },
+        "contactPhone": { "type": "string" },
+        "pastorId": { "type": "string", "description": "Assigned Pastor UID" }
+      },
+      "required": ["tenantId", "name"]
+    },
+    "User": {
+      "title": "User",
+      "description": "A user of the platform (Super Admin, Admin, Pastor, Worker, Member).",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "tenantId": { "type": "string" },
+        "role": { "type": "string", "enum": ["super-admin", "church-admin", "pastor", "worker", "member"] },
+        "displayName": { "type": "string" },
+        "email": { "type": "string" },
+        "branchIds": { "type": "array", "description": "Branches this user is associated with" }
+      },
+      "required": ["uid", "email", "role"]
+    },
+    "Member": {
+      "title": "Member",
+      "description": "A church member profile.",
+      "type": "object",
+      "properties": {
+        "tenantId": { "type": "string" },
+        "branchId": { "type": "string" },
+        "firstName": { "type": "string" },
+        "lastName": { "type": "string" },
+        "email": { "type": "string" },
+        "phone": { "type": "string" },
+        "familyId": { "type": "string" },
+        "joinedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["tenantId", "branchId", "firstName", "lastName"]
+    },
+    "Service": {
+      "title": "Church Service",
+      "description": "An event or standard service record.",
+      "type": "object",
+      "properties": {
+        "tenantId": { "type": "string" },
+        "branchId": { "type": "string" },
+        "title": { "type": "string" },
+        "type": { "type": "string", "enum": ["sunday-service", "midweek", "event", "special"] },
+        "startTime": { "type": "string", "format": "date-time" },
+        "endTime": { "type": "string", "format": "date-time" }
+      }
+    },
+    "Staff": {
+      "title": "Staff & Pastors",
+      "description": "Leadership and workers directory for a church.",
+      "type": "object",
+      "properties": {
+        "tenantId": { "type": "string" },
+        "firstName": { "type": "string" },
+        "lastName": { "type": "string" },
+        "email": { "type": "string" },
+        "phone": { "type": "string" },
+        "role": { "type": "string", "enum": ["pastor", "worker", "admin"] },
+        "position": { "type": "string" },
+        "status": { "type": "string", "enum": ["active", "inactive"] },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["tenantId", "firstName", "lastName", "role"]
+    },
+    "Attendance": {
+      "title": "Service Attendance",
+      "description": "Headcount and statistics for a church service.",
+      "type": "object",
+      "properties": {
+        "tenantId": { "type": "string" },
+        "branchId": { "type": "string" },
+        "serviceId": { "type": "string" },
+        "totalCount": { "type": "number" },
+        "menCount": { "type": "number" },
+        "womenCount": { "type": "number" },
+        "childrenCount": { "type": "number" },
+        "firstTimersCount": { "type": "number" },
+        "notes": { "type": "string" },
+        "recordedBy": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["tenantId", "branchId", "serviceId", "totalCount"]
+    },
+    "Visitation": {
+      "title": "Member Visitation",
+      "description": "Records of follow-up or pastoral visits to members.",
+      "type": "object",
+      "properties": {
+        "tenantId": { "type": "string" },
+        "branchId": { "type": "string" },
+        "memberId": { "type": "string" },
+        "visitorId": { "type": "string", "description": "UID of the person who conducted the visit" },
+        "visitDate": { "type": "string", "format": "date-time" },
+        "purpose": { "type": "string" },
+        "outcome": { "type": "string" },
+        "notes": { "type": "string" },
+        "recordedBy": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["tenantId", "branchId", "memberId", "visitDate"]
+    }
+  },
+  "firestore": {
+    "tenants": {
+      "schema": "Tenant",
+      "description": "Church organizations"
+    },
+    "tenants/{tenantId}/branches": {
+      "schema": "Branch",
+      "description": "Sub-collection of branches for a church"
+    },
+    "users": {
+      "schema": "User",
+      "description": "Platform users with multi-tenant context"
+    },
+    "members": {
+      "schema": "Member",
+      "description": "Church members (isolated by tenantId/branchId)"
+    },
+    "services": {
+      "schema": "Service",
+      "description": "Service schedule"
+    },
+    "staff": {
+      "schema": "Staff",
+      "description": "Church staff and pastors directory"
+    },
+    "attendance": {
+      "schema": "Attendance",
+      "description": "Service attendance records"
+    },
+    "visitations": {
+      "schema": "Visitation",
+      "description": "Member visitation logs"
+    }
+  }
+}

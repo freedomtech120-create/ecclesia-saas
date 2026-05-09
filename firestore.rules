@@ -1,0 +1,173 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // 0. Default Deny
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // --- Helpers ---
+    function isSignedIn() { return request.auth != null; }
+    function isEmailVerified() { return request.auth.token.email_verified == true; }
+    function getUserData() { return get(/databases/$(database)/documents/users/$(request.auth.uid)).data; }
+    function getRole() { return getUserData().role; }
+    function getTenantId() { return getUserData().tenantId; }
+    function isSuperAdmin() { return isSignedIn() && getRole() == 'super-admin'; }
+    function isTenantAdmin(tenantId) { return isSignedIn() && getTenantId() == tenantId && getRole() == 'church-admin'; }
+    function belongsToTenant(tenantId) { return isSignedIn() && getTenantId() == tenantId; }
+    
+    function isValidId(id) { return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$'); }
+    function incoming() { return request.resource.data; }
+    function existing() { return resource.data; }
+
+    // --- Validation Helpers ---
+    function isValidTenant(data) {
+      return (!data.keys().hasAny(['name']) || (data.name is string && data.name.size() <= 100)) &&
+             (!data.keys().hasAny(['slug']) || (data.slug is string && data.slug.size() <= 100)) &&
+             (!data.keys().hasAny(['adminId']) || data.adminId == request.auth.uid);
+    }
+
+    function isValidUser(data) {
+      return (!data.keys().hasAny(['uid']) || data.uid == request.auth.uid) &&
+             (!data.keys().hasAny(['role']) || data.role in ['super-admin', 'church-admin', 'pastor', 'worker', 'member']);
+    }
+
+    function isValidBranch(data) {
+      return (!data.keys().hasAny(['name']) || (data.name is string && data.name.size() <= 100));
+    }
+
+    function isValidMember(data) {
+      return (!data.keys().hasAny(['firstName']) || (data.firstName is string && data.firstName.size() <= 50)) &&
+             (!data.keys().hasAny(['lastName']) || (data.lastName is string && data.lastName.size() <= 50)) &&
+             (!data.keys().hasAny(['tenantId']) || data.tenantId == getTenantId());
+    }
+
+    function isValidStaff(data) {
+      return (!data.keys().hasAny(['tenantId']) || data.tenantId == getTenantId());
+    }
+
+    function isValidFinance(data) {
+      return (!data.keys().hasAny(['amount']) || (data.amount is number && data.amount >= 0)) &&
+             (!data.keys().hasAny(['type']) || data.type in ['offering', 'tithe', 'donation', 'expense']) &&
+             (!data.keys().hasAny(['tenantId']) || data.tenantId == getTenantId());
+    }
+
+    function isValidService(data) {
+      return (!data.keys().hasAny(['tenantId']) || data.tenantId == getTenantId());
+    }
+
+    function isValidVisitation(data) {
+      return (!data.keys().hasAny(['tenantId']) || data.tenantId == getTenantId());
+    }
+
+    function isValidAttendance(data) {
+      return (!data.keys().hasAny(['tenantId']) || data.tenantId == getTenantId());
+    }
+
+    // --- Collection Rules ---
+
+    // 1. Users Collection
+    match /users/{userId} {
+      allow get: if isSignedIn() && (request.auth.uid == userId || isSuperAdmin() || getTenantId() == resource.data.tenantId);
+      allow list: if isSignedIn() && (isSuperAdmin() || resource.data.tenantId == getTenantId());
+      allow create: if isSignedIn() && request.auth.uid == userId && isValidUser(incoming()) && incoming().keys().hasAll(['uid', 'email', 'role', 'displayName']);
+      allow update: if isSignedIn() && (
+        (request.auth.uid == userId && incoming().diff(existing()).affectedKeys().hasOnly(['displayName', 'photoURL', 'branchIds'])) ||
+        isSuperAdmin() ||
+        (isTenantAdmin(existing().tenantId) && incoming().diff(existing()).affectedKeys().hasOnly(['role', 'branchIds']))
+      );
+    }
+
+    // 2. Tenants Collection
+    match /tenants/{tenantId} {
+      allow read: if isSignedIn() && (belongsToTenant(tenantId) || isSuperAdmin());
+      allow create: if isSignedIn() && isValidTenant(incoming()) && incoming().keys().hasAll(['name', 'slug', 'adminId', 'status', 'subscriptionTier']);
+      allow update: if isSignedIn() && (
+        isSuperAdmin() ||
+        (isTenantAdmin(tenantId) && incoming().diff(existing()).affectedKeys().hasOnly(['name', 'logoUrl']))
+      );
+    }
+
+    // 3. Branches Collection
+    match /branches/{branchId} {
+      allow get: if isSignedIn() && (belongsToTenant(resource.data.tenantId) || isSuperAdmin());
+      allow list: if isSignedIn() && (resource.data.tenantId == getTenantId() || isSuperAdmin());
+      allow create: if isSignedIn() && isTenantAdmin(incoming().tenantId) && isValidBranch(incoming()) && incoming().keys().hasAll(['name', 'address', 'tenantId', 'createdAt']);
+      allow update: if isSignedIn() && (isTenantAdmin(existing().tenantId) || isSuperAdmin()) && isValidBranch(incoming());
+    }
+
+    // 4. Members Collection
+    match /members/{memberId} {
+      allow get: if isSignedIn() && (belongsToTenant(resource.data.tenantId) || isSuperAdmin());
+      allow list: if isSignedIn() && (resource.data.tenantId == getTenantId() || isSuperAdmin());
+      allow create: if isSignedIn() && (getRole() in ['church-admin', 'pastor', 'worker']) && isValidMember(incoming()) && incoming().keys().hasAll(['firstName', 'lastName', 'email', 'branchId', 'tenantId', 'createdAt', 'status']);
+      allow update: if isSignedIn() && (getRole() in ['church-admin', 'pastor', 'worker']) && belongsToTenant(existing().tenantId) && isValidMember(incoming());
+      allow delete: if isSignedIn() && isTenantAdmin(existing().tenantId);
+    }
+
+    // 5. Staff Collection
+    match /staff/{staffId} {
+      allow get: if isSignedIn() && (
+        belongsToTenant(resource.data.tenantId) || 
+        resource.data.email == request.auth.token.email ||
+        isSuperAdmin()
+      );
+      allow list: if isSignedIn() && (
+        resource.data.tenantId == getTenantId() || 
+        resource.data.email == request.auth.token.email || 
+        isSuperAdmin()
+      );
+      allow create: if isSignedIn() && (isTenantAdmin(incoming().tenantId) || isSuperAdmin()) && isValidStaff(incoming()) && incoming().keys().hasAll(['firstName', 'lastName', 'email', 'role', 'tenantId', 'createdAt', 'status']);
+      allow update: if isSignedIn() && (isTenantAdmin(existing().tenantId) || isSuperAdmin()) && isValidStaff(incoming());
+      allow delete: if isSignedIn() && (isTenantAdmin(existing().tenantId) || isSuperAdmin());
+    }
+
+    // 6. Finances Collection
+    match /finances/{recordId} {
+      allow get: if isSignedIn() && (belongsToTenant(resource.data.tenantId) || isSuperAdmin());
+      allow list: if isSignedIn() && (resource.data.tenantId == getTenantId() || isSuperAdmin());
+      allow create: if isSignedIn() && (getRole() in ['church-admin', 'pastor']) && isValidFinance(incoming()) && incoming().keys().hasAll(['amount', 'type', 'category', 'branchId', 'tenantId', 'createdAt']);
+      allow update: if isSignedIn() && (getRole() in ['church-admin', 'pastor']) && belongsToTenant(existing().tenantId) && isValidFinance(incoming());
+      allow delete: if isSignedIn() && isTenantAdmin(existing().tenantId);
+    }
+
+    // 7. Services Collection
+    match /services/{serviceId} {
+      allow get: if isSignedIn() && (belongsToTenant(resource.data.tenantId) || isSuperAdmin());
+      allow list: if isSignedIn() && (resource.data.tenantId == getTenantId() || isSuperAdmin());
+      allow create: if isSignedIn() && (getRole() in ['church-admin', 'pastor', 'worker']) && isValidService(incoming()) && incoming().keys().hasAll(['title', 'date', 'branchId', 'tenantId', 'createdAt']);
+      allow update: if isSignedIn() && (getRole() in ['church-admin', 'pastor', 'worker']) && belongsToTenant(existing().tenantId) && isValidService(incoming());
+      allow delete: if isSignedIn() && isTenantAdmin(existing().tenantId);
+    }
+
+    // 8. Visitations Collection
+    match /visitations/{visitationId} {
+      allow get: if isSignedIn() && (belongsToTenant(resource.data.tenantId) || isSuperAdmin());
+      allow list: if isSignedIn() && (resource.data.tenantId == getTenantId() || isSuperAdmin());
+      allow create: if isSignedIn() && (getRole() in ['church-admin', 'pastor', 'worker']) && isValidVisitation(incoming()) && incoming().keys().hasAll(['memberId', 'visitDate', 'branchId', 'tenantId', 'createdAt']);
+      allow update: if isSignedIn() && (getRole() in ['church-admin', 'pastor', 'worker']) && belongsToTenant(existing().tenantId) && isValidVisitation(incoming());
+      allow delete: if isSignedIn() && isTenantAdmin(existing().tenantId);
+    }
+
+    // 9. Attendance Collection
+    match /attendance/{attendanceId} {
+      allow get: if isSignedIn() && (belongsToTenant(resource.data.tenantId) || isSuperAdmin());
+      allow list: if isSignedIn() && (resource.data.tenantId == getTenantId() || isSuperAdmin());
+      allow create: if isSignedIn() && (getRole() in ['church-admin', 'pastor', 'worker']) && isValidAttendance(incoming()) && incoming().keys().hasAll(['serviceId', 'totalCount', 'branchId', 'tenantId', 'createdAt']);
+      allow update: if isSignedIn() && (getRole() in ['church-admin', 'pastor', 'worker']) && belongsToTenant(existing().tenantId) && isValidAttendance(incoming());
+      allow delete: if isSignedIn() && isTenantAdmin(existing().tenantId);
+    }
+
+    // 10. Staff Claims (Login support for admin-generated passwords)
+    match /staff_claims/{email} {
+      allow get: if true; 
+      allow create: if isTenantAdmin(incoming().tenantId) || isSuperAdmin();
+      allow update, delete: if isTenantAdmin(existing().tenantId) || isSuperAdmin();
+    }
+    
+    // 11. Connection Test
+    match /_connection_test_/{doc} {
+      allow read, write: if true; // Temporary for init
+    }
+  }
+}
