@@ -7,7 +7,7 @@ import { Toaster } from 'sonner';
 import { AuthForm } from './components/auth/AuthForm';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
-import { Church } from 'lucide-react';
+import { Church, ArrowLeft } from 'lucide-react';
 import MembersPage from './pages/members/MembersPage';
 import MemberProfilePage from './pages/members/MemberProfilePage';
 import StaffPage from './pages/staff/StaffPage';
@@ -27,6 +27,13 @@ import AdminPanel from './pages/admin/AdminPanel';
 
 const LoginPage = () => (
   <div className="flex items-center justify-center min-h-screen bg-slate-50 p-4 font-sans">
+    <Link 
+      to="/" 
+      className="absolute top-6 left-6 z-10 flex items-center gap-2 px-4 py-2.5 bg-white rounded-full border border-slate-200 shadow-sm text-[10px] font-black text-slate-500 hover:text-indigo-600 hover:bg-slate-50 transition-all hover:-translate-x-1 uppercase tracking-widest"
+    >
+      <ArrowLeft className="w-3.5 h-3.5" />
+      Return Home
+    </Link>
     <div className="absolute inset-0 overflow-hidden pointer-events-none">
        <div className="absolute -top-[10%] -left-[10%] w-[40%] h-[40%] bg-indigo-100 rounded-full blur-[120px] opacity-50"></div>
        <div className="absolute -bottom-[10%] -right-[10%] w-[40%] h-[40%] bg-indigo-100 rounded-full blur-[120px] opacity-50"></div>
