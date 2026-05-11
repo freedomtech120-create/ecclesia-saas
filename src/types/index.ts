@@ -18,6 +18,15 @@ export interface Tenant {
   subscriptionTier: 'free' | 'basic' | 'premium';
   logoUrl?: string;
   adminId: string;
+  contactEmail?: string;
+  contactPhone?: string;
+  address?: string;
+  website?: string;
+  settings?: {
+    primaryColor?: string;
+    fontFamily?: string;
+    theme?: 'light' | 'dark' | 'system';
+  };
   createdAt: any;
 }
 

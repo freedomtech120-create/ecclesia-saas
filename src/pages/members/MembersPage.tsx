@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { collection, query, where, onSnapshot, addDoc, serverTimestamp, getDocs } from 'firebase/firestore';
 import { db } from '@/src/lib/firebase';
 import { useAuth } from '@/src/contexts/AuthContext';
+import { useTenant } from '@/src/contexts/TenantContext';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
@@ -14,9 +15,11 @@ import { toast } from 'sonner';
 
 export default function MembersPage() {
   const { profile, isPastor } = useAuth();
+  const { effectiveTenantId } = useTenant();
   const navigate = useNavigate();
   const [members, setMembers] = useState<any[]>([]);
   const [branches, setBranches] = useState<any[]>([]);
+  const [groups, setGroups] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [isAddOpen, setIsAddOpen] = useState(false);
@@ -27,26 +30,32 @@ export default function MembersPage() {
     email: '',
     phone: '',
     branchId: '',
+    groupIds: [] as string[]
   });
 
   useEffect(() => {
-    if (!profile?.tenantId) return;
+    if (!effectiveTenantId) return;
 
     // Fetch branches for selection
-    getDocs(query(collection(db, 'branches'), where('tenantId', '==', profile.tenantId))).then(snap => {
+    getDocs(query(collection(db, 'branches'), where('tenantId', '==', effectiveTenantId))).then(snap => {
       setBranches(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+    });
+
+    // Fetch groups for selection
+    getDocs(query(collection(db, 'groups'), where('tenantId', '==', effectiveTenantId))).then(snap => {
+      setGroups(snap.docs.map(d => ({ id: d.id, ...d.data() })));
     });
 
     let q = query(
       collection(db, 'members'),
-      where('tenantId', '==', profile.tenantId)
+      where('tenantId', '==', effectiveTenantId)
     );
 
     // If pastor, restrict to their branch
-    if (isPastor && profile.staffData?.assignedBranchId && profile.staffData.assignedBranchId !== 'none') {
+    if (isPastor && profile?.staffData?.assignedBranchId && profile.staffData.assignedBranchId !== 'none') {
       q = query(
         collection(db, 'members'),
-        where('tenantId', '==', profile.tenantId),
+        where('tenantId', '==', effectiveTenantId),
         where('branchId', '==', profile.staffData.assignedBranchId)
       );
     }
@@ -61,23 +70,23 @@ export default function MembersPage() {
     });
 
     return unsubscribe;
-  }, [profile?.tenantId]);
+  }, [effectiveTenantId, isPastor, profile?.staffData?.assignedBranchId]);
 
   const handleAddMember = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!profile?.tenantId) return;
+    if (!effectiveTenantId) return;
 
     try {
       await addDoc(collection(db, 'members'), {
         ...newMember,
-        tenantId: profile.tenantId,
-        branchId: newMember.branchId || profile.staffData?.assignedBranchId || 'main',
+        tenantId: effectiveTenantId,
+        branchId: newMember.branchId || profile?.staffData?.assignedBranchId || 'main',
         createdAt: serverTimestamp(),
         status: 'active'
       });
       toast.success('Member added successfully');
       setIsAddOpen(false);
-      setNewMember({ firstName: '', lastName: '', email: '', phone: '', branchId: '' });
+      setNewMember({ firstName: '', lastName: '', email: '', phone: '', branchId: '', groupIds: [] });
     } catch (error: any) {
       toast.error('Failed to add member: ' + error.message);
     }
@@ -146,6 +155,30 @@ export default function MembersPage() {
                   </Select>
                 </div>
               )}
+
+              <div className="space-y-2">
+                <Label className="text-xs font-bold uppercase tracking-wider text-slate-500">Ministry/Groups</Label>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-2 border border-slate-100 rounded-lg p-3 bg-slate-50/50 max-h-[120px] overflow-y-auto">
+                   {groups.length === 0 ? (
+                     <p className="text-[10px] text-slate-400 italic col-span-2">No groups created yet</p>
+                   ) : groups.map(g => (
+                     <label key={g.id} className="flex items-center gap-2 cursor-pointer group">
+                       <input 
+                         type="checkbox" 
+                         className="w-3.5 h-3.5 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
+                         checked={newMember.groupIds.includes(g.id)}
+                         onChange={(e) => {
+                           const ids = e.target.checked 
+                             ? [...newMember.groupIds, g.id]
+                             : newMember.groupIds.filter(id => id !== g.id);
+                           setNewMember({...newMember, groupIds: ids});
+                         }}
+                       />
+                       <span className="text-xs text-slate-600 group-hover:text-indigo-600 transition-colors truncate">{g.name}</span>
+                     </label>
+                   ))}
+                </div>
+              </div>
               
               <DialogFooter>
                 <Button type="submit" className="w-full bg-indigo-600">Save Member</Button>

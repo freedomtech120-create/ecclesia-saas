@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { collection, query, where, onSnapshot, addDoc, serverTimestamp, getDocs } from 'firebase/firestore';
 import { db } from '@/src/lib/firebase';
 import { useAuth } from '@/src/contexts/AuthContext';
+import { useTenant } from '@/src/contexts/TenantContext';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -14,6 +15,7 @@ import { toast } from 'sonner';
 
 export default function BranchesPage() {
   const { profile } = useAuth();
+  const { effectiveTenantId } = useTenant();
   const navigate = useNavigate();
   const [branches, setBranches] = useState<any[]>([]);
   const [staff, setStaff] = useState<any[]>([]);
@@ -29,11 +31,11 @@ export default function BranchesPage() {
   });
 
   useEffect(() => {
-    if (!profile?.tenantId) return;
+    if (!effectiveTenantId) return;
 
     const q = query(
       collection(db, 'branches'),
-      where('tenantId', '==', profile.tenantId)
+      where('tenantId', '==', effectiveTenantId)
     );
 
     const unsubscribe = onSnapshot(q, (snapshot) => {
@@ -48,7 +50,7 @@ export default function BranchesPage() {
     // Fetch staff for assignment
     const staffQuery = query(
       collection(db, 'staff'),
-      where('tenantId', '==', profile.tenantId),
+      where('tenantId', '==', effectiveTenantId),
       where('role', 'in', ['pastor', 'worker', 'admin'])
     );
     
@@ -57,16 +59,16 @@ export default function BranchesPage() {
     });
 
     return unsubscribe;
-  }, [profile?.tenantId]);
+  }, [effectiveTenantId]);
 
   const handleAddBranch = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!profile?.tenantId) return;
+    if (!effectiveTenantId) return;
 
     try {
       await addDoc(collection(db, 'branches'), {
         ...newBranch,
-        tenantId: profile.tenantId,
+        tenantId: effectiveTenantId,
         createdAt: serverTimestamp(),
       });
       toast.success('Branch added successfully');

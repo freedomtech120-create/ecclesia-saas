@@ -40,6 +40,31 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           profileData = profileDoc.data();
         }
 
+        // AUTO-PROMOTE OWNER TO SUPER-ADMIN
+        if (firebaseUser.email === 'freedomtech120@gmail.com' && profileData?.role !== 'super-admin') {
+           const ownerProfile = {
+             ...(profileData || {}),
+             uid: firebaseUser.uid,
+             email: firebaseUser.email,
+             displayName: firebaseUser.displayName || 'App Owner',
+             role: 'super-admin',
+             tenantId: 'platform',
+             status: 'active',
+             updatedAt: serverTimestamp()
+           };
+           
+           if (!profileData) {
+             ownerProfile.createdAt = serverTimestamp();
+           }
+
+           try {
+             await setDoc(doc(db, 'users', firebaseUser.uid), ownerProfile, { merge: true });
+             profileData = ownerProfile;
+           } catch (e) {
+             console.error("Error promoting owner to super-admin:", e);
+           }
+        }
+
         // Also check if this user is a staff member by email
         if (firebaseUser.email) {
           const staffQuery = query(collection(db, 'staff'), where('email', '==', firebaseUser.email));
@@ -89,8 +114,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     user,
     profile,
     loading,
-    isAdmin: profile?.role === 'church-admin' || profile?.role === 'super-admin',
-    isSuperAdmin: profile?.role === 'super-admin',
+    isAdmin: profile?.role === 'church-admin' || profile?.role === 'super-admin' || user?.email === 'freedomtech120@gmail.com',
+    isSuperAdmin: profile?.role === 'super-admin' || user?.email === 'freedomtech120@gmail.com',
     isPastor: profile?.role === 'pastor' || profile?.staffData?.role === 'pastor',
   };
 

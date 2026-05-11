@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { collection, query, where, onSnapshot, addDoc, serverTimestamp, deleteDoc, doc, setDoc } from 'firebase/firestore';
 import { db } from '@/src/lib/firebase';
 import { useAuth } from '@/src/contexts/AuthContext';
+import { useTenant } from '@/src/contexts/TenantContext';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -16,6 +17,7 @@ import { cn } from '@/lib/utils';
 
 export default function StaffPage() {
   const { profile } = useAuth();
+  const { effectiveTenantId } = useTenant();
   const navigate = useNavigate();
   const [staff, setStaff] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -28,45 +30,54 @@ export default function StaffPage() {
     phone: '',
     role: 'worker', // worker, pastor, admin
     position: '',
+    responsibility: 'none', // none, finance, branch_manager, group_president, secretary
     assignedBranchId: '',
     tempPassword: '',
   });
   const [branches, setBranches] = useState<any[]>([]);
 
   useEffect(() => {
-    if (!profile?.tenantId) return;
+    if (!effectiveTenantId) return;
 
     // Fetch branches for assignment
-    const bQuery = query(collection(db, 'branches'), where('tenantId', '==', profile.tenantId));
-    onSnapshot(bQuery, (snap) => {
+    const bQuery = query(collection(db, 'branches'), where('tenantId', '==', effectiveTenantId));
+    const unsubscribeBranches = onSnapshot(bQuery, (snap) => {
       setBranches(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+    }, (error) => {
+      console.error("Branches onSnapshot error:", error);
     });
 
     const q = query(
       collection(db, 'staff'),
-      where('tenantId', '==', profile.tenantId)
+      where('tenantId', '==', effectiveTenantId)
     );
 
-    const unsubscribe = onSnapshot(q, (snapshot) => {
+    const unsubscribeStaff = onSnapshot(q, (snapshot) => {
       const staffData = snapshot.docs.map(doc => ({
         id: doc.id,
         ...doc.data()
       }));
       setStaff(staffData);
       setLoading(false);
+    }, (error) => {
+      console.error("Staff onSnapshot error:", error);
+      setLoading(false);
     });
 
-    return () => unsubscribe();
-  }, [profile?.tenantId]);
+    return () => {
+      unsubscribeBranches();
+      unsubscribeStaff();
+    };
+  }, [effectiveTenantId]);
 
   const handleAddStaff = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!profile?.tenantId) return;
+    if (!effectiveTenantId) return;
 
     try {
       await addDoc(collection(db, 'staff'), {
         ...newStaff,
-        tenantId: profile.tenantId,
+        tenantId: effectiveTenantId,
         createdAt: serverTimestamp(),
         status: 'active'
       });
@@ -76,7 +87,7 @@ export default function StaffPage() {
         await setDoc(doc(db, 'staff_claims', newStaff.email.toLowerCase()), {
           tempPassword: newStaff.tempPassword,
           role: newStaff.role,
-          tenantId: profile.tenantId,
+          tenantId: effectiveTenantId,
           firstName: newStaff.firstName,
           lastName: newStaff.lastName,
           createdAt: serverTimestamp()
@@ -85,7 +96,17 @@ export default function StaffPage() {
 
       toast.success('Staff/Pastor registered successfully');
       setIsAddOpen(false);
-      setNewStaff({ firstName: '', lastName: '', email: '', phone: '', role: 'worker', position: '', assignedBranchId: '', tempPassword: '' });
+      setNewStaff({ 
+        firstName: '', 
+        lastName: '', 
+        email: '', 
+        phone: '', 
+        role: 'worker', 
+        position: '', 
+        responsibility: 'none',
+        assignedBranchId: '', 
+        tempPassword: '' 
+      });
     } catch (error: any) {
       toast.error('Failed to register: ' + error.message);
     }
@@ -165,9 +186,24 @@ export default function StaffPage() {
                     </Select>
                  </div>
                  <div className="space-y-2">
-                    <Label htmlFor="position" className="text-xs font-bold uppercase tracking-wider text-slate-500">Position/Title</Label>
-                    <Input id="position" value={newStaff.position} onChange={e => setNewStaff({...newStaff, position: e.target.value})} placeholder="e.g. Lead Pastor" className="border-slate-200" />
+                    <Label className="text-xs font-bold uppercase tracking-wider text-slate-500">Responsibility</Label>
+                    <Select value={newStaff.responsibility} onValueChange={v => setNewStaff({...newStaff, responsibility: v})}>
+                      <SelectTrigger className="border-slate-200">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="none">General</SelectItem>
+                        <SelectItem value="finance">Finance Manager</SelectItem>
+                        <SelectItem value="branch_manager">Branch Manager</SelectItem>
+                        <SelectItem value="group_president">Group President</SelectItem>
+                        <SelectItem value="secretary">Secretary</SelectItem>
+                      </SelectContent>
+                    </Select>
                  </div>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="position" className="text-xs font-bold uppercase tracking-wider text-slate-500">Position/Title</Label>
+                <Input id="position" value={newStaff.position} onChange={e => setNewStaff({...newStaff, position: e.target.value})} placeholder="e.g. Lead Pastor" className="border-slate-200" />
               </div>
               <div className="space-y-2">
                 <Label htmlFor="phone" className="text-xs font-bold uppercase tracking-wider text-slate-500">Phone Number</Label>
@@ -243,12 +279,19 @@ export default function StaffPage() {
                       </div>
                     </TableCell>
                     <TableCell>
-                      <span className={cn(
-                        "px-2 py-0.5 rounded text-[10px] font-black uppercase tracking-widest shadow-sm",
-                        person.role === 'pastor' ? 'bg-indigo-600 text-white shadow-indigo-100' : 'bg-slate-100 text-slate-600 shadow-slate-100'
-                      )}>
-                        {person.role}
-                      </span>
+                      <div className="flex flex-col gap-1">
+                        <span className={cn(
+                          "px-2 py-0.5 rounded text-[10px] font-black uppercase tracking-widest shadow-sm w-fit",
+                          person.role === 'pastor' ? 'bg-indigo-600 text-white shadow-indigo-100' : 'bg-slate-100 text-slate-600 shadow-slate-100'
+                        )}>
+                          {person.role}
+                        </span>
+                        {person.responsibility && person.responsibility !== 'none' && (
+                          <span className="px-2 py-0.5 rounded text-[10px] font-black uppercase tracking-widest bg-emerald-50 text-emerald-600 border border-emerald-100 w-fit">
+                            {person.responsibility.replace('_', ' ')}
+                          </span>
+                        )}
+                      </div>
                     </TableCell>
                     <TableCell className="text-xs font-semibold text-slate-500 italic">{person.position || 'Worker'}</TableCell>
                     <TableCell>

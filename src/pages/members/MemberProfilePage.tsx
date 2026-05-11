@@ -3,11 +3,13 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { doc, getDoc, updateDoc, collection, query, where, getDocs } from 'firebase/firestore';
 import { db } from '@/src/lib/firebase';
 import { useAuth } from '@/src/contexts/AuthContext';
+import { useTenant } from '@/src/contexts/TenantContext';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Badge } from '@/components/ui/badge';
 import { 
   ArrowLeft, 
   User, 
@@ -53,6 +55,9 @@ function VisitationTab({ memberId, tenantId, branchId }: { memberId: string, ten
 
     const unsubscribe = onSnapshot(q, (snap) => {
       setVisitations(snap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+      setLoading(false);
+    }, (error) => {
+      console.error("Visitation onSnapshot error:", error);
       setLoading(false);
     });
 
@@ -152,8 +157,10 @@ function VisitationTab({ memberId, tenantId, branchId }: { memberId: string, ten
 
 export default function MemberProfilePage() {
   const { memberId } = useParams();
+  const { effectiveTenantId } = useTenant();
   const navigate = useNavigate();
   const [member, setMember] = useState<any>(null);
+  const [groups, setGroups] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [editMode, setEditMode] = useState(false);
   const [finances, setFinances] = useState<any[]>([]);
@@ -163,26 +170,39 @@ export default function MemberProfilePage() {
     lastName: '',
     email: '',
     phone: '',
-    status: 'active'
+    status: 'active',
+    groupIds: [] as string[]
   });
 
   useEffect(() => {
     async function loadMemberData() {
-      if (!memberId) return;
+      if (!memberId || !effectiveTenantId) return;
       try {
         const docRef = doc(db, 'members', memberId);
         const docSnap = await getDoc(docRef);
         
         if (docSnap.exists()) {
           const data = { id: docSnap.id, ...docSnap.data() } as any;
+          if (data.tenantId !== effectiveTenantId) {
+            toast.error('Unauthorized access to member record');
+            navigate('/dashboard/members');
+            return;
+          }
           setMember(data);
           setFormData({
             firstName: data.firstName || '',
             lastName: data.lastName || '',
             email: data.email || '',
             phone: data.phone || '',
-            status: data.status || 'active'
+            status: data.status || 'active',
+            groupIds: data.groupIds || []
           });
+
+          // Fetch all groups for assignment
+          if (data.tenantId) {
+            const gSnap = await getDocs(query(collection(db, 'groups'), where('tenantId', '==', data.tenantId)));
+            setGroups(gSnap.docs.map(d => ({ id: d.id, ...d.data() })));
+          }
 
           // Fetch recent financial contributions if any
           // Note: In the finances collection we stored 'contributor' as name/ID. 
@@ -305,6 +325,27 @@ export default function MemberProfilePage() {
                   <Label className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Phone Number</Label>
                   <Input value={formData.phone} onChange={e => setFormData({...formData, phone: e.target.value})} className="border-slate-200" />
                 </div>
+                <div className="space-y-1">
+                   <Label className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Ministry/Groups</Label>
+                   <div className="grid grid-cols-1 gap-1 border border-slate-100 rounded-lg p-2 bg-slate-50/50 max-h-[150px] overflow-y-auto">
+                      {groups.map(g => (
+                        <label key={g.id} className="flex items-center gap-2 cursor-pointer py-0.5">
+                          <input 
+                            type="checkbox" 
+                            className="w-3 h-3 rounded"
+                            checked={formData.groupIds.includes(g.id)}
+                            onChange={(e) => {
+                              const ids = e.target.checked 
+                                ? [...formData.groupIds, g.id]
+                                : formData.groupIds.filter(id => id !== g.id);
+                              setFormData({...formData, groupIds: ids});
+                            }}
+                          />
+                          <span className="text-[10px] text-slate-600 truncate">{g.name}</span>
+                        </label>
+                      ))}
+                   </div>
+                </div>
               </div>
             )}
           </CardContent>
@@ -396,14 +437,44 @@ export default function MemberProfilePage() {
              </TabsContent>
 
              <TabsContent value="ministry">
-                <Card className="border-slate-200 bg-slate-50 border-dashed p-12 text-center">
-                   <div className="w-16 h-16 rounded-full bg-white border border-slate-200 flex items-center justify-center mx-auto mb-4">
-                     <Users className="w-8 h-8 text-slate-300" />
-                   </div>
-                   <h3 className="font-bold text-slate-900">Not assigned yet</h3>
-                   <p className="text-sm text-slate-500 mt-2 max-w-sm mx-auto italic">Assign this member to a ministry department (Choir, Ushering, Outreach, etc.) to track their service impact.</p>
-                   <Button variant="outline" className="mt-8 border-slate-200">Assign to Ministry</Button>
-                </Card>
+                {member?.groupIds && member.groupIds.length > 0 ? (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                     {groups.filter(g => member.groupIds.includes(g.id)).map(group => (
+                       <Card key={group.id} className="border-slate-200 hover:shadow-md transition-all group">
+                          <CardHeader className="pb-2">
+                            <div className="flex justify-between items-start">
+                              <div className="w-10 h-10 bg-indigo-50 rounded-xl flex items-center justify-center text-indigo-600">
+                                <Users className="w-5 h-5" />
+                              </div>
+                              <Badge variant="outline" className="text-[10px] font-bold uppercase tracking-wider">{group.category}</Badge>
+                            </div>
+                            <CardTitle className="text-lg font-bold mt-4">{group.name}</CardTitle>
+                            <CardDescription className="text-xs italic">{group.description}</CardDescription>
+                          </CardHeader>
+                          <CardContent>
+                             <div className="flex items-center gap-4 mt-2">
+                               <div className="text-[10px] font-bold text-slate-400 uppercase tracking-widest flex items-center gap-1">
+                                 <Clock className="w-3 h-3" /> Active Since 2024
+                               </div>
+                             </div>
+                          </CardContent>
+                       </Card>
+                     ))}
+                     <Card className="border-slate-200 border-dashed hover:bg-slate-50 transition-colors cursor-pointer flex flex-col items-center justify-center p-6 text-center" onClick={() => setEditMode(true)}>
+                        <Plus className="w-8 h-8 text-slate-300 mb-2" />
+                        <p className="text-sm font-bold text-slate-500">Add to another group</p>
+                     </Card>
+                  </div>
+                ) : (
+                   <Card className="border-slate-200 bg-slate-50 border-dashed p-12 text-center">
+                      <div className="w-16 h-16 rounded-full bg-white border border-slate-200 flex items-center justify-center mx-auto mb-4">
+                        <Users className="w-8 h-8 text-slate-300" />
+                      </div>
+                      <h3 className="font-bold text-slate-900">Not assigned yet</h3>
+                      <p className="text-sm text-slate-500 mt-2 max-w-sm mx-auto italic">Assign this member to a ministry department (Choir, Ushering, Outreach, etc.) to track their service impact.</p>
+                      <Button variant="outline" className="mt-8 border-slate-200" onClick={() => setEditMode(true)}>Assign to Ministry</Button>
+                   </Card>
+                )}
              </TabsContent>
 
              <TabsContent value="visitation">

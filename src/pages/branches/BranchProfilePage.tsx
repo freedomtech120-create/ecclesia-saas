@@ -1,21 +1,285 @@
 import React, { useState, useEffect } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
-import { doc, getDoc, collection, query, where, getDocs, updateDoc } from 'firebase/firestore';
+import { useParams, useNavigate, Link } from 'react-router-dom';
+import { doc, getDoc, collection, query, where, getDocs, updateDoc, onSnapshot, orderBy, serverTimestamp, addDoc, limit } from 'firebase/firestore';
 import { db } from '@/src/lib/firebase';
 import { useAuth } from '@/src/contexts/AuthContext';
+import { useTenant } from '@/src/contexts/TenantContext';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { MapPin, Phone, Mail, User, Users, Calendar, ArrowLeft, Save, Trash2, TrendingUp, DollarSign, Plus, Wallet, History } from 'lucide-react';
+import { MapPin, Phone, Mail, User, Users, Calendar, ArrowLeft, Save, Trash2, TrendingUp, DollarSign, Plus, Wallet, History, Share2, Globe, CheckCircle2, XCircle, Copy, Link as LinkIcon, ExternalLink } from 'lucide-react';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
-import { addDoc, serverTimestamp, onSnapshot, orderBy, limit } from 'firebase/firestore';
 import { format } from 'date-fns';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+
+function BranchMembers({ branchId, tenantId }: { branchId: string, tenantId: string }) {
+  const [members, setMembers] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const q = query(
+      collection(db, 'members'),
+      where('branchId', '==', branchId),
+      where('tenantId', '==', tenantId),
+      orderBy('createdAt', 'desc')
+    );
+
+    const unsubscribe = onSnapshot(q, (snap) => {
+      setMembers(snap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+      setLoading(false);
+    }, (error) => {
+      console.error("BranchMembers onSnapshot error:", error);
+      setLoading(false);
+    });
+
+    return unsubscribe;
+  }, [branchId, tenantId]);
+
+  const approveMember = async (id: string) => {
+    try {
+      await updateDoc(doc(db, 'members', id), { status: 'active' });
+      toast.success('Member approved');
+    } catch (err: any) {
+      toast.error('Failed to approve');
+    }
+  };
+
+  if (loading) return <div className="p-8 text-center text-slate-400">Loading congregation...</div>;
+
+  return (
+    <Card className="border-slate-200">
+      <CardHeader>
+        <CardTitle>Branch Congregation</CardTitle>
+        <CardDescription>Members registered at this location. Review pending onboarding here.</CardDescription>
+      </CardHeader>
+      <CardContent className="p-0">
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead className="pl-6">Name</TableHead>
+              <TableHead>Contact</TableHead>
+              <TableHead>Status</TableHead>
+              <TableHead>Joined</TableHead>
+              <TableHead className="text-right pr-6">Action</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {members.length === 0 ? (
+              <TableRow>
+                <TableCell colSpan={5} className="text-center py-12 text-slate-400 italic">No members found.</TableCell>
+              </TableRow>
+            ) : (
+              members.map(member => (
+                <TableRow key={member.id}>
+                  <TableCell className="pl-6">
+                    <div className="font-bold">{member.firstName} {member.lastName}</div>
+                    <div className="text-[10px] text-slate-400 uppercase tracking-widest">{member.source || 'Manual'}</div>
+                  </TableCell>
+                  <TableCell>
+                    <div className="text-sm">{member.email}</div>
+                    <div className="text-xs text-slate-500">{member.phone}</div>
+                  </TableCell>
+                  <TableCell>
+                    <span className={cn(
+                      "px-2 py-0.5 rounded text-[10px] font-black uppercase tracking-widest",
+                      member.status === 'active' ? "bg-emerald-50 text-emerald-600" : 
+                      member.status === 'pending' ? "bg-amber-50 text-amber-600 animate-pulse" : "bg-slate-100 text-slate-500"
+                    )}>
+                      {member.status || 'Active'}
+                    </span>
+                  </TableCell>
+                  <TableCell className="text-sm text-slate-500">
+                    {member.createdAt ? format(member.createdAt.toDate(), 'MMM d, yyyy') : 'N/A'}
+                  </TableCell>
+                  <TableCell className="text-right pr-6">
+                    {member.status === 'pending' && (
+                      <Button size="sm" onClick={() => approveMember(member.id)} className="bg-emerald-600 text-[10px] font-black uppercase tracking-widest h-8">
+                        Approve
+                      </Button>
+                    )}
+                    <Button variant="ghost" size="sm" render={<Link to={`/dashboard/members/${member.id}`}>View Profile</Link>} className="h-8 ml-2" />
+                  </TableCell>
+                </TableRow>
+              ))
+            )}
+          </TableBody>
+        </Table>
+      </CardContent>
+    </Card>
+  );
+}
+
+function BranchPublicForms({ branchId, tenantId, branchName }: { branchId: string, tenantId: string, branchName: string }) {
+  const [forms, setForms] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [isAddOpen, setIsAddOpen] = useState(false);
+  const [newForm, setNewForm] = useState({
+    title: '',
+    description: '',
+    type: 'member-onboarding'
+  });
+
+  useEffect(() => {
+    const q = query(
+      collection(db, 'public_forms'),
+      where('branchId', '==', branchId),
+      where('tenantId', '==', tenantId),
+      orderBy('createdAt', 'desc')
+    );
+
+    const unsubscribe = onSnapshot(q, (snap) => {
+      setForms(snap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+      setLoading(false);
+    }, (error) => {
+      console.error("BranchPublicForms onSnapshot error:", error);
+      setLoading(false);
+    });
+
+    return unsubscribe;
+  }, [branchId, tenantId]);
+
+  const handleCreate = async (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      await addDoc(collection(db, 'public_forms'), {
+        ...newForm,
+        branchId,
+        tenantId,
+        status: 'active',
+        createdAt: serverTimestamp(),
+      });
+      toast.success('Public form created!');
+      setIsAddOpen(false);
+      setNewForm({ title: '', description: '', type: 'member-onboarding' });
+    } catch (err: any) {
+      toast.error('Failed: ' + err.message);
+    }
+  };
+
+  const copyLink = (id: string) => {
+    const link = `${window.location.origin}/f/${id}`;
+    navigator.clipboard.writeText(link);
+    toast.success('Link copied to clipboard');
+  };
+
+  const deleteForm = async (id: string) => {
+    if (!confirm('Are you sure? This will disable the link.')) return;
+    try {
+      await updateDoc(doc(db, 'public_forms', id), { status: 'closed' });
+      toast.success('Form closed');
+    } catch (err: any) {
+      toast.error('Failed to close form');
+    }
+  };
+
+  return (
+    <div className="space-y-6">
+      <div className="flex justify-between items-center">
+        <div>
+          <h3 className="text-lg font-bold text-slate-900">Digital Connection Points</h3>
+          <p className="text-sm text-slate-500">Links members can use to register, donate, or sign up.</p>
+        </div>
+        <Dialog open={isAddOpen} onOpenChange={setIsAddOpen}>
+          <DialogTrigger render={
+            <Button className="bg-emerald-600 hover:bg-emerald-700 gap-2 font-black uppercase tracking-widest text-[10px]">
+              <Plus className="w-4 h-4" /> Create Shareable Link
+            </Button>
+          } />
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Create Public Form</DialogTitle>
+              <DialogDescription>Generate a new link for {branchName}</DialogDescription>
+            </DialogHeader>
+            <form onSubmit={handleCreate} className="space-y-4 py-4">
+              <div className="space-y-2">
+                <Label className="text-xs font-bold uppercase text-slate-500">Link Title</Label>
+                <Input value={newForm.title} onChange={e => setNewForm({...newForm, title: e.target.value})} placeholder="e.g. New Member Welcome" required />
+              </div>
+              <div className="space-y-2">
+                <Label className="text-xs font-bold uppercase text-slate-500">Short Description</Label>
+                <Input value={newForm.description} onChange={e => setNewForm({...newForm, description: e.target.value})} placeholder="e.g. Join our family..." />
+              </div>
+              <div className="space-y-2">
+                <Label className="text-xs font-bold uppercase text-slate-500">Form Type</Label>
+                <Select value={newForm.type} onValueChange={v => setNewForm({...newForm, type: v})}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="member-onboarding">Member Onboarding (Profile)</SelectItem>
+                    <SelectItem value="donation">Donation / Pledge</SelectItem>
+                    <SelectItem value="event-registration">Event Registration</SelectItem>
+                    <SelectItem value="general">General Feedback / Inquiry</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <Button type="submit" className="w-full bg-indigo-600">Generate Form Link</Button>
+            </form>
+          </DialogContent>
+        </Dialog>
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        {forms.length === 0 && !loading && (
+          <div className="col-span-full py-12 text-center bg-slate-50 rounded-2xl border-2 border-dashed border-slate-200">
+             <Globe className="w-12 h-12 text-slate-200 mx-auto mb-4" />
+             <p className="text-slate-400 font-bold">No public forms created yet.</p>
+          </div>
+        )}
+        {forms.map(form => (
+          <Card key={form.id} className={cn(
+            "border-slate-200 shadow-sm hover:shadow-md transition-all overflow-hidden",
+            form.status === 'closed' && "opacity-60 grayscale"
+          )}>
+            <div className="p-4 bg-slate-50/50 border-b border-slate-100 flex justify-between items-center">
+               <span className="text-[10px] font-black uppercase tracking-widest text-indigo-600 px-2 py-0.5 bg-indigo-50 rounded">
+                 {form.type.replace('-', ' ')}
+               </span>
+               {form.status === 'active' ? (
+                 <CheckCircle2 className="w-4 h-4 text-emerald-500" />
+               ) : (
+                 <XCircle className="w-4 h-4 text-red-400" />
+               )}
+            </div>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-lg font-bold truncate">{form.title}</CardTitle>
+              <CardDescription className="line-clamp-2 min-h-[40px]">{form.description || 'Public submission form.'}</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="flex gap-2">
+                <Button 
+                  variant="outline" 
+                  size="sm" 
+                  className="flex-1 gap-2 border-slate-200 text-[10px] font-black uppercase tracking-widest hover:bg-indigo-50 hover:text-indigo-600"
+                  onClick={() => copyLink(form.id)}
+                >
+                  <Copy className="w-3.5 h-3.5" /> Copy Link
+                </Button>
+                <Button 
+                  variant="ghost" 
+                  size="sm" 
+                  className="gap-2 text-[10px] font-black uppercase tracking-widest hover:text-red-600"
+                  onClick={() => deleteForm(form.id)}
+                >
+                  {form.status === 'active' ? 'Close' : 'Closed'}
+                </Button>
+              </div>
+              <div className="pt-2 border-t border-slate-100 flex justify-between items-center text-[10px] font-bold text-slate-400 uppercase tracking-widest">
+                <span>Created {format(form.createdAt.toDate(), 'MMM d')}</span>
+                <a href={`/f/${form.id}`} target="_blank" rel="noreferrer" className="flex items-center gap-1 text-indigo-600 hover:underline">
+                  Preview <ExternalLink className="w-3 h-3" />
+                </a>
+              </div>
+            </CardContent>
+          </Card>
+        ))}
+      </div>
+    </div>
+  );
+}
 
 function BranchFinances({ branchId, tenantId, branchName }: { branchId: string, tenantId: string, branchName: string }) {
   const [finances, setFinances] = useState<any[]>([]);
@@ -40,6 +304,9 @@ function BranchFinances({ branchId, tenantId, branchName }: { branchId: string, 
 
     const unsubscribe = onSnapshot(q, (snap) => {
       setFinances(snap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+      setLoading(false);
+    }, (error) => {
+      console.error("BranchFinances onSnapshot error:", error);
       setLoading(false);
     });
 
@@ -172,6 +439,7 @@ function BranchFinances({ branchId, tenantId, branchName }: { branchId: string, 
 export default function BranchProfilePage() {
   const { branchId } = useParams();
   const { profile } = useAuth();
+  const { effectiveTenantId } = useTenant();
   const navigate = useNavigate();
   const [branch, setBranch] = useState<any>(null);
   const [staff, setStaff] = useState<any[]>([]);
@@ -188,11 +456,16 @@ export default function BranchProfilePage() {
 
   useEffect(() => {
     async function loadBranchData() {
-      if (!branchId) return;
+      if (!branchId || !effectiveTenantId) return;
       try {
         const branchDoc = await getDoc(doc(db, 'branches', branchId));
         if (branchDoc.exists()) {
           const data = { id: branchDoc.id, ...branchDoc.data() } as any;
+          if (data.tenantId !== effectiveTenantId) {
+            toast.error('Unauthorized access to branch record');
+            navigate('/dashboard/branches');
+            return;
+          }
           setBranch(data);
           setFormData({
             name: data.name || '',
@@ -205,14 +478,14 @@ export default function BranchProfilePage() {
           // Fetch member count for this branch
           const membersQuery = query(
             collection(db, 'members'), 
-            where('tenantId', '==', profile.tenantId),
+            where('tenantId', '==', effectiveTenantId),
             where('branchId', '==', branchId)
           );
           const membersSnap = await getDocs(membersQuery);
           
           const servicesQuery = query(
             collection(db, 'services'), 
-            where('tenantId', '==', profile.tenantId),
+            where('tenantId', '==', effectiveTenantId),
             where('branchId', '==', branchId)
           );
           const servicesSnap = await getDocs(servicesQuery);
@@ -223,10 +496,10 @@ export default function BranchProfilePage() {
           });
 
           // Fetch staff for assignment
-          if (profile?.tenantId) {
+          if (effectiveTenantId) {
             const staffQuery = query(
               collection(db, 'staff'),
-              where('tenantId', '==', profile.tenantId),
+              where('tenantId', '==', effectiveTenantId),
               where('role', 'in', ['pastor', 'worker', 'admin'])
             );
             const staffSnap = await getDocs(staffQuery);
@@ -324,6 +597,7 @@ export default function BranchProfilePage() {
           <TabsTrigger value="overview" className="rounded-lg px-8">Overview</TabsTrigger>
           <TabsTrigger value="members" className="rounded-lg px-8">Members</TabsTrigger>
           <TabsTrigger value="finances" className="rounded-lg px-8">Finances</TabsTrigger>
+          <TabsTrigger value="connect" className="rounded-lg px-8">Connect Links</TabsTrigger>
           <TabsTrigger value="settings" className="rounded-lg px-8 text-red-600">Settings</TabsTrigger>
         </TabsList>
 
@@ -424,19 +698,15 @@ export default function BranchProfilePage() {
         </TabsContent>
 
         <TabsContent value="members">
-           <Card className="border-slate-200">
-             <CardHeader>
-               <CardTitle>Branch Congregation</CardTitle>
-               <CardDescription>All members registered specifically at this location.</CardDescription>
-             </CardHeader>
-             <CardContent className="py-12 text-center text-slate-400 italic">
-               Member listing filtered by branch is arriving soon...
-             </CardContent>
-           </Card>
+           <BranchMembers branchId={branchId!} tenantId={effectiveTenantId!} />
         </TabsContent>
 
         <TabsContent value="finances">
-          <BranchFinances branchId={branchId!} tenantId={profile?.tenantId!} branchName={branch.name} />
+          <BranchFinances branchId={branchId!} tenantId={effectiveTenantId!} branchName={branch.name} />
+        </TabsContent>
+
+        <TabsContent value="connect">
+          <BranchPublicForms branchId={branchId!} tenantId={effectiveTenantId!} branchName={branch.name} />
         </TabsContent>
 
         <TabsContent value="settings">

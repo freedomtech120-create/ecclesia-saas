@@ -12,6 +12,9 @@
   },
   "dependencies": {
     "@base-ui/react": "^1.4.1",
+    "@capacitor/android": "^8.3.3",
+    "@capacitor/cli": "^8.3.3",
+    "@capacitor/core": "^8.3.3",
     "@fontsource-variable/geist": "^5.2.8",
     "@google/genai": "^1.29.0",
     "@hookform/resolvers": "^5.2.2",
@@ -30,6 +33,7 @@
     "react-day-picker": "^10.0.0",
     "react-dom": "^19.0.1",
     "react-hook-form": "^7.75.0",
+    "react-paystack": "^6.0.0",
     "react-router-dom": "^7.15.0",
     "recharts": "^3.8.1",
     "shadcn": "^4.7.0",

@@ -17,59 +17,13 @@ import FinancesPage from './pages/finances/FinancesPage';
 import ServicesPage from './pages/services/ServicesPage';
 import AttendancePage from './pages/attendance/AttendancePage';
 import BranchDashboardPage from './pages/dashboard/BranchDashboardPage';
+import CommunicationsPage from './pages/communications/CommunicationsPage';
+import GroupsPage from './pages/groups/GroupsPage';
+import LandingPage from './pages/public/LandingPage';
+import PublicFormPage from './pages/public/PublicFormPage';
+import SettingsPage from './pages/settings/SettingsPage';
 
 import AdminPanel from './pages/admin/AdminPanel';
-
-// Placeholder Pages
-const LandingPage = () => (
-  <div className="flex flex-col min-h-screen bg-white font-sans selection:bg-indigo-100 selection:text-indigo-900">
-    <nav className="h-20 border-b border-slate-100 flex items-center justify-between px-8 max-w-7xl mx-auto w-full">
-      <div className="flex items-center gap-2">
-        <div className="w-8 h-8 bg-indigo-600 rounded-lg flex items-center justify-center text-white font-bold shadow-lg shadow-indigo-200">
-          <Church className="w-5 h-5" />
-        </div>
-        <span className="font-bold text-xl tracking-tight text-slate-900">Ecclesia</span>
-      </div>
-      <div className="flex items-center gap-6">
-        <Link to="/login" className="text-sm font-semibold text-slate-600 hover:text-indigo-600 transition-colors">Login</Link>
-        <Link to="/login" className="px-5 py-2 bg-indigo-600 text-white rounded-full text-sm font-bold shadow-lg shadow-indigo-200 hover:bg-indigo-700 transition-all hover:-translate-y-0.5">
-          Get Started
-        </Link>
-      </div>
-    </nav>
-    
-    <main className="flex-1 flex flex-col items-center justify-center p-8 text-center max-w-4xl mx-auto py-24">
-      <div className="inline-flex items-center gap-2 px-3 py-1 bg-indigo-50 text-indigo-600 rounded-full text-[10px] font-bold uppercase tracking-widest mb-6">
-        <span className="relative flex h-2 w-2">
-          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-indigo-400 opacity-75"></span>
-          <span className="relative inline-flex rounded-full h-2 w-2 bg-indigo-500"></span>
-        </span>
-        New: Multi-Branch Management
-      </div>
-      <h1 className="text-5xl md:text-7xl font-black tracking-tight text-slate-900 mb-8 leading-[1.1]">
-        Manage your Church with <span className="text-indigo-600">Excellence.</span>
-      </h1>
-      <p className="text-lg md:text-xl text-slate-500 max-w-2xl mb-12 leading-relaxed">
-        The all-in-one cloud platform for modern churches. Organize congregations, track growth, manage finances, and empower your ministry from anywhere.
-      </p>
-      <div className="flex flex-col sm:flex-row gap-4">
-        <Link to="/login" className="px-8 py-4 bg-indigo-600 text-white rounded-xl text-lg font-bold shadow-xl shadow-indigo-100 hover:bg-indigo-700 transition-all hover:scale-105">
-          Start Free Trial
-        </Link>
-        <Button variant="outline" className="px-8 py-4 h-auto border-slate-200 text-slate-600 rounded-xl text-lg font-bold hover:bg-slate-50 transition-all">
-          Book a Demo
-        </Button>
-      </div>
-      
-      <div className="mt-24 grid grid-cols-2 md:grid-cols-4 gap-12 w-full opacity-40 grayscale">
-        <div className="flex items-center justify-center font-bold text-2xl tracking-tighter">TRUSTED</div>
-        <div className="flex items-center justify-center font-bold text-2xl tracking-tighter">MINISTRY</div>
-        <div className="flex items-center justify-center font-bold text-2xl tracking-tighter">FAITHFUL</div>
-        <div className="flex items-center justify-center font-bold text-2xl tracking-tighter">HARVEST</div>
-      </div>
-    </main>
-  </div>
-);
 
 const LoginPage = () => (
   <div className="flex items-center justify-center min-h-screen bg-slate-50 p-4 font-sans">
@@ -222,6 +176,7 @@ export default function App() {
           <Routes>
             <Route path="/" element={<LandingPage />} />
             <Route path="/login" element={<LoginPage />} />
+            <Route path="/f/:formId" element={<PublicFormPage />} />
             
             <Route path="/dashboard" element={
               <ProtectedRoute>
@@ -238,7 +193,9 @@ export default function App() {
               <Route path="services" element={<ServicesPage />} />
               <Route path="attendance" element={<AttendancePage />} />
               <Route path="finances" element={<FinancesPage />} />
-              <Route path="settings" element={<div>Church Settings</div>} />
+              <Route path="communications" element={<CommunicationsPage />} />
+              <Route path="groups" element={<GroupsPage />} />
+              <Route path="settings" element={<SettingsPage />} />
             </Route>
 
             <Route path="/admin" element={

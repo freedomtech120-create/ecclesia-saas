@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { collection, query, where, getDocs, onSnapshot, orderBy, limit, serverTimestamp, addDoc, doc, updateDoc, writeBatch } from 'firebase/firestore';
 import { db } from '@/src/lib/firebase';
 import { useAuth } from '@/src/contexts/AuthContext';
+import { useTenant } from '@/src/contexts/TenantContext';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -198,6 +199,7 @@ function MemberChecklist({ serviceId, tenantId, branchId, onComplete }: { servic
 
 export default function AttendancePage() {
   const { profile } = useAuth();
+  const { effectiveTenantId } = useTenant();
   const [attendances, setAttendances] = useState<any[]>([]);
   const [services, setServices] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -233,12 +235,12 @@ export default function AttendancePage() {
   const isBalanced = parseInt(formData.totalCount) === calculatedTotal;
 
   useEffect(() => {
-    if (!profile?.tenantId) return;
+    if (!effectiveTenantId) return;
 
     // Fetch Attendances
     const qA = query(
       collection(db, 'attendance'),
-      where('tenantId', '==', profile.tenantId),
+      where('tenantId', '==', effectiveTenantId),
       orderBy('createdAt', 'desc'),
       limit(50)
     );
@@ -246,32 +248,38 @@ export default function AttendancePage() {
     const unsubscribeA = onSnapshot(qA, (snap) => {
       setAttendances(snap.docs.map(d => ({ id: d.id, ...d.data() })));
       setLoading(false);
+    }, (error) => {
+      console.error("Attendance onSnapshot error:", error);
+      toast.error("Failed to sync attendance records");
+      setLoading(false);
     });
 
     // Fetch Services for selection
     const qS = query(
       collection(db, 'services'),
-      where('tenantId', '==', profile.tenantId),
+      where('tenantId', '==', effectiveTenantId),
       orderBy('date', 'desc'),
       limit(20)
     );
 
     const unsubscribeS = onSnapshot(qS, (snap) => {
       setServices(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+    }, (error) => {
+      console.error("Services onSnapshot error:", error);
     });
 
     return () => {
       unsubscribeA();
       unsubscribeS();
     };
-  }, [profile?.tenantId]);
+  }, [effectiveTenantId]);
 
   const handleAdd = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!isBalanced && !confirm(`The total (${formData.totalCount}) does not match the sum of Men+Women+Children (${calculatedTotal}). Save anyway?`)) {
       return;
     }
-    if (!profile?.tenantId) return;
+    if (!effectiveTenantId) return;
 
     const selectedService = services.find(s => s.id === formData.serviceId);
     if (!selectedService) {
@@ -284,13 +292,13 @@ export default function AttendancePage() {
         ...formData,
         serviceId: formData.serviceId,
         branchId: selectedService.branchId || 'main',
-        tenantId: profile.tenantId,
+        tenantId: effectiveTenantId,
         totalCount: parseInt(formData.totalCount) || 0,
         menCount: parseInt(formData.menCount) || 0,
         womenCount: parseInt(formData.womenCount) || 0,
         childrenCount: parseInt(formData.childrenCount) || 0,
         firstTimersCount: parseInt(formData.firstTimersCount) || 0,
-        recordedBy: profile.uid,
+        recordedBy: profile?.uid,
         createdAt: serverTimestamp(),
       };
 

@@ -57,7 +57,8 @@
         "email": { "type": "string" },
         "phone": { "type": "string" },
         "familyId": { "type": "string" },
-        "joinedAt": { "type": "string", "format": "date-time" }
+        "joinedAt": { "type": "string", "format": "date-time" },
+        "groupIds": { "type": "array", "description": "Ministries/Groups the member belongs to" }
       },
       "required": ["tenantId", "branchId", "firstName", "lastName"]
     },
@@ -143,6 +144,77 @@
         "createdAt": { "type": "string", "format": "date-time" }
       },
       "required": ["tenantId", "serviceId", "memberId", "status"]
+    },
+    "PublicForm": {
+      "title": "Public Form",
+      "description": "A shareable form for member registration, donations, or events.",
+      "type": "object",
+      "properties": {
+        "tenantId": { "type": "string" },
+        "branchId": { "type": "string" },
+        "title": { "type": "string" },
+        "description": { "type": "string" },
+        "type": { "type": "string", "enum": ["member-onboarding", "donation", "event-registration", "general"] },
+        "status": { "type": "string", "enum": ["active", "closed"] },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["tenantId", "branchId", "title", "type"]
+    },
+    "FormResponse": {
+      "title": "Form Response",
+      "description": "Data submitted via a public form.",
+      "type": "object",
+      "properties": {
+        "formId": { "type": "string" },
+        "tenantId": { "type": "string" },
+        "branchId": { "type": "string" },
+        "data": { "type": "object" },
+        "submittedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["formId", "tenantId", "data"]
+    },
+    "SMSConfig": {
+      "title": "SMS Configuration",
+      "description": "Settings for SMS API integration.",
+      "type": "object",
+      "properties": {
+        "tenantId": { "type": "string" },
+        "branchId": { "type": "string" },
+        "provider": { "type": "string", "enum": ["twilio", "africastalking"] },
+        "apiKey": { "type": "string" },
+        "apiSecret": { "type": "string" },
+        "senderId": { "type": "string" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["tenantId", "provider"]
+    },
+    "SMSLog": {
+      "title": "SMS Log",
+      "description": "Records of messages sent.",
+      "type": "object",
+      "properties": {
+        "tenantId": { "type": "string" },
+        "branchId": { "type": "string" },
+        "recipientCount": { "type": "number" },
+        "message": { "type": "string" },
+        "status": { "type": "string" },
+        "sentAt": { "type": "string", "format": "date-time" }
+      }
+    },
+    "Group": {
+      "title": "Church Group / Ministry",
+      "description": "Departments or fellowship groups (e.g., Youth Ministry, Choir).",
+      "type": "object",
+      "properties": {
+        "tenantId": { "type": "string" },
+        "branchId": { "type": "string" },
+        "name": { "type": "string" },
+        "description": { "type": "string" },
+        "category": { "type": "string", "enum": ["ministry", "fellowship", "department", "other"] },
+        "leaderId": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["tenantId", "name", "category"]
     }
   },
   "firestore": {
@@ -181,6 +253,26 @@
     "member_attendance": {
       "schema": "MemberAttendance",
       "description": "Individual member attendance for specific services"
+    },
+    "public_forms": {
+      "schema": "PublicForm",
+      "description": "Configurations for shareable forms"
+    },
+    "form_responses": {
+      "schema": "FormResponse",
+      "description": "Collected submissions from public forms"
+    },
+    "sms_configs": {
+      "schema": "SMSConfig",
+      "description": "SMS API credentials"
+    },
+    "sms_logs": {
+      "schema": "SMSLog",
+      "description": "History of outgoing SMS"
+    },
+    "groups": {
+      "schema": "Group",
+      "description": "Church ministries and departments"
     }
   }
 }

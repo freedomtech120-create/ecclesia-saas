@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { collection, query, where, onSnapshot, addDoc, serverTimestamp, writeBatch, doc, getDocs, updateDoc } from 'firebase/firestore';
 import { db } from '@/src/lib/firebase';
 import { useAuth } from '@/src/contexts/AuthContext';
+import { useTenant } from '@/src/contexts/TenantContext';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -147,8 +148,13 @@ function MemberChecklist({ serviceId, tenantId, branchId, onComplete }: { servic
           filteredMembers.map(member => (
             <div key={member.id} className="p-4 rounded-xl border border-slate-100 bg-slate-50/20 space-y-3 hover:bg-slate-50/50 transition-colors">
               <div className="flex justify-between items-center">
-                <div className="min-w-0">
-                  <h4 className="font-bold text-slate-900 truncate">{member.firstName} {member.lastName}</h4>
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-2">
+                    <h4 className="font-bold text-slate-900 truncate">{member.firstName} {member.lastName}</h4>
+                    {member.status === 'pending' && (
+                      <span className="text-[8px] font-black bg-amber-100 text-amber-600 px-1.5 py-0.5 rounded uppercase tracking-tighter">Pending Review</span>
+                    )}
+                  </div>
                   <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{member.phone || 'No Phone'}</p>
                 </div>
                 <div className="flex gap-1">
@@ -330,6 +336,7 @@ function AttendanceDialog({ service, onSuccess }: { service: any, onSuccess: () 
 
 export default function ServicesPage() {
   const { profile } = useAuth();
+  const { effectiveTenantId } = useTenant();
   const [services, setServices] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [isAddOpen, setIsAddOpen] = useState(false);
@@ -345,11 +352,11 @@ export default function ServicesPage() {
   });
 
   useEffect(() => {
-    if (!profile?.tenantId) return;
+    if (!effectiveTenantId) return;
 
     const q = query(
       collection(db, 'services'),
-      where('tenantId', '==', profile.tenantId)
+      where('tenantId', '==', effectiveTenantId)
     );
 
     const unsubscribe = onSnapshot(q, (snapshot) => {
@@ -362,17 +369,17 @@ export default function ServicesPage() {
     });
 
     return unsubscribe;
-  }, [profile?.tenantId]);
+  }, [effectiveTenantId]);
 
   const handleCreateService = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!profile?.tenantId) return;
+    if (!effectiveTenantId) return;
 
     try {
       await addDoc(collection(db, 'services'), {
         ...newService,
-        tenantId: profile.tenantId,
-        branchId: profile.branchIds?.[0] || 'main',
+        tenantId: effectiveTenantId,
+        branchId: profile?.staffData?.assignedBranchId || 'main',
         createdAt: serverTimestamp(),
         attendanceCount: 0,
         status: 'scheduled',

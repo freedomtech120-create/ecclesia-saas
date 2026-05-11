@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { collection, query, where, onSnapshot, addDoc, serverTimestamp, orderBy, limit } from 'firebase/firestore';
 import { db } from '@/src/lib/firebase';
 import { useAuth } from '@/src/contexts/AuthContext';
+import { useTenant } from '@/src/contexts/TenantContext';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -16,6 +17,7 @@ import { cn } from '@/lib/utils';
 
 export default function FinancesPage() {
   const { profile } = useAuth();
+  const { effectiveTenantId } = useTenant();
   const [records, setRecords] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [isAddOpen, setIsAddOpen] = useState(false);
@@ -29,11 +31,11 @@ export default function FinancesPage() {
   });
 
   useEffect(() => {
-    if (!profile?.tenantId) return;
+    if (!effectiveTenantId) return;
 
     const q = query(
       collection(db, 'finances'),
-      where('tenantId', '==', profile.tenantId),
+      where('tenantId', '==', effectiveTenantId),
       orderBy('createdAt', 'desc'),
       limit(50)
     );
@@ -48,11 +50,11 @@ export default function FinancesPage() {
     });
 
     return unsubscribe;
-  }, [profile?.tenantId]);
+  }, [effectiveTenantId]);
 
   const handleAddRecord = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!profile?.tenantId) return;
+    if (!effectiveTenantId) return;
 
     try {
       await addDoc(collection(db, 'finances'), {
@@ -61,8 +63,8 @@ export default function FinancesPage() {
         category: newRecord.category,
         contributor: newRecord.contributor || (newRecord.type === 'expense' ? 'Church Expense' : 'Anonymous'),
         description: newRecord.description,
-        tenantId: profile.tenantId,
-        branchId: profile.staffData?.assignedBranchId || 'main',
+        tenantId: effectiveTenantId,
+        branchId: profile?.staffData?.assignedBranchId || 'main',
         createdAt: serverTimestamp(),
       });
       toast.success('Financial record added');
