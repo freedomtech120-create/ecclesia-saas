@@ -22,6 +22,7 @@ import GroupsPage from './pages/groups/GroupsPage';
 import LandingPage from './pages/public/LandingPage';
 import PublicFormPage from './pages/public/PublicFormPage';
 import SettingsPage from './pages/settings/SettingsPage';
+import TransfersPage from './pages/transfers/TransfersPage';
 
 import AdminPanel from './pages/admin/AdminPanel';
 
@@ -202,6 +203,7 @@ export default function App() {
               <Route path="finances" element={<FinancesPage />} />
               <Route path="communications" element={<CommunicationsPage />} />
               <Route path="groups" element={<GroupsPage />} />
+              <Route path="transfers" element={<TransfersPage />} />
               <Route path="settings" element={<SettingsPage />} />
             </Route>
 

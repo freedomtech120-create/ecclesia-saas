@@ -1,12 +1,12 @@
 import React, { useState, useEffect } from 'react';
-import { collection, query, onSnapshot, getDocs, updateDoc, setDoc, doc, serverTimestamp } from 'firebase/firestore';
+import { collection, query, onSnapshot, getDocs, updateDoc, setDoc, doc, serverTimestamp, orderBy } from 'firebase/firestore';
 import { db } from '@/src/lib/firebase';
 import { useAuth } from '@/src/contexts/AuthContext';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Shield, Building2, Users, CreditCard, ExternalLink, Eye, UserCog, History, Globe, Trash2 } from 'lucide-react';
+import { Shield, Building2, Users, CreditCard, ExternalLink, Eye, UserCog, History, Globe, Trash2, Banknote, RefreshCw } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 import { useTenant } from '@/src/contexts/TenantContext';
@@ -20,6 +20,7 @@ export default function AdminPanel() {
   const [tenants, setTenants] = useState<any[]>([]);
   const [selectedTenant, setSelectedTenant] = useState<any>(null);
   const [loading, setLoading] = useState(true);
+  const [transactions, setTransactions] = useState<any[]>([]);
 
   useEffect(() => {
     if (!isSuperAdmin) return;
@@ -35,6 +36,33 @@ export default function AdminPanel() {
 
     return unsubscribe;
   }, [isSuperAdmin]);
+
+  useEffect(() => {
+    if (!isSuperAdmin) return;
+
+    const q = query(collection(db, 'subscription_transactions'), orderBy('createdAt', 'desc'));
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      setTransactions(data);
+    }, (error) => {
+      console.error("transactions error:", error);
+    });
+
+    return unsubscribe;
+  }, [isSuperAdmin]);
+
+  const formatTimestamp = (ts: any) => {
+    if (!ts) return 'Just now';
+    if (typeof ts.toDate === 'function') {
+      return ts.toDate().toLocaleString();
+    }
+    if (ts instanceof Date) {
+      return ts.toLocaleString();
+    }
+    return String(ts);
+  };
+
+  const totalRevenue = transactions.reduce((acc, t) => acc + (t.amount || 0), 0);
 
   if (!isSuperAdmin) {
     return <div className="p-8 text-center text-slate-500 font-bold uppercase tracking-widest italic">Unauthorized System Access</div>;
@@ -95,9 +123,33 @@ export default function AdminPanel() {
           </CardHeader>
           <CardContent className="relative">
             <div className="text-3xl font-black text-slate-900 tracking-tighter">
-              {tenants.filter(t => t.subscriptionTier !== 'free').length}
+              {tenants.filter(t => t.subscriptionTier !== 'free' && t.subscriptionTier !== undefined).length}
             </div>
             <p className="text-[10px] text-indigo-600 font-bold uppercase mt-1">Paid Accounts</p>
+          </CardContent>
+        </Card>
+
+        <Card className="border-slate-200 shadow-sm relative overflow-hidden group">
+          <div className="absolute top-0 right-0 w-20 h-20 bg-emerald-50 rounded-full -mr-10 -mt-10 transition-transform group-hover:scale-125 duration-500"></div>
+          <CardHeader className="pb-2 flex flex-row items-center justify-between relative">
+            <CardTitle className="text-[10px] font-black uppercase tracking-widest text-slate-400">Total Revenue</CardTitle>
+            <Banknote className="w-4 h-4 text-emerald-500" />
+          </CardHeader>
+          <CardContent className="relative">
+            <div className="text-3xl font-black text-slate-950 tracking-tighter">GH₵{totalRevenue.toLocaleString()}</div>
+            <p className="text-[10px] text-emerald-600 font-bold uppercase mt-1">Platform Revenue (GHS)</p>
+          </CardContent>
+        </Card>
+
+        <Card className="border-slate-200 shadow-sm relative overflow-hidden group">
+          <div className="absolute top-0 right-0 w-20 h-20 bg-amber-50 rounded-full -mr-10 -mt-10 transition-transform group-hover:scale-125 duration-500"></div>
+          <CardHeader className="pb-2 flex flex-row items-center justify-between relative">
+            <CardTitle className="text-[10px] font-black uppercase tracking-widest text-slate-400">Transactions Logged</CardTitle>
+            <RefreshCw className="w-4 h-4 text-amber-500" />
+          </CardHeader>
+          <CardContent className="relative">
+            <div className="text-3xl font-black text-slate-900 tracking-tighter">{transactions.length}</div>
+            <p className="text-[10px] text-amber-600 font-bold uppercase mt-1">Total Orders</p>
           </CardContent>
         </Card>
       </div>
@@ -241,6 +293,74 @@ export default function AdminPanel() {
               ))}
             </TableBody>
           </Table>
+        </CardContent>
+      </Card>
+
+      <Card className="border-slate-200 shadow-sm overflow-hidden bg-white mt-8">
+        <CardHeader className="bg-slate-50/50 border-b border-slate-100 py-4 flex flex-col md:flex-row md:items-center justify-between gap-2">
+          <div>
+            <CardTitle className="text-sm font-black uppercase tracking-widest text-slate-600 flex items-center gap-2">
+              <CreditCard className="w-4 h-4 text-indigo-600" />
+              Global Subscription Transactions Log
+            </CardTitle>
+            <p className="text-xs text-slate-400 mt-1">Real-time listing of church platform subscription purchase events.</p>
+          </div>
+          <Badge variant="outline" className="bg-indigo-50 text-indigo-700 border-indigo-100 font-bold">
+            {transactions.length} Received
+          </Badge>
+        </CardHeader>
+        <CardContent className="p-0">
+          {transactions.length === 0 ? (
+            <div className="text-center py-12 text-slate-400 italic text-sm">
+              No subscription payment transactions registered on the platform yet.
+            </div>
+          ) : (
+            <Table>
+              <TableHeader className="bg-slate-50/30">
+                <TableRow>
+                  <TableHead className="text-[10px] font-black uppercase tracking-widest text-slate-400 pl-6">Church / Tenant</TableHead>
+                  <TableHead className="text-[10px] font-black uppercase tracking-widest text-slate-400">Plan</TableHead>
+                  <TableHead className="text-[10px] font-black uppercase tracking-widest text-slate-400">Amount Paid</TableHead>
+                  <TableHead className="text-[10px] font-black uppercase tracking-widest text-slate-400">Reference Barcode</TableHead>
+                  <TableHead className="text-[10px] font-black uppercase tracking-widest text-slate-400">Date & Time</TableHead>
+                  <TableHead className="text-[10px] font-black uppercase tracking-widest text-slate-400">Payer Account</TableHead>
+                  <TableHead className="text-right text-[10px] font-black uppercase tracking-widest text-slate-400 pr-6">Clearing</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {transactions.map((tr) => (
+                  <TableRow key={tr.id} className="hover:bg-slate-50/50 transition-colors">
+                    <TableCell className="font-semibold text-slate-900 pl-6">
+                      {tr.tenantName || 'Unregistered Church'}
+                      <span className="block text-[9px] text-slate-400 font-mono mt-0.5">{tr.tenantId}</span>
+                    </TableCell>
+                    <TableCell>
+                      <span className="px-2 py-0.5 rounded text-[10px] font-black uppercase tracking-widest bg-indigo-50 text-indigo-700 border border-indigo-100">
+                        {tr.planName || tr.planId}
+                      </span>
+                    </TableCell>
+                    <TableCell className="font-black text-slate-950">
+                      GH₵{tr.amount?.toLocaleString()}
+                    </TableCell>
+                    <TableCell className="font-mono text-[11px] text-slate-500 uppercase tracking-tight">
+                      {tr.paymentReference || 'N/A'}
+                    </TableCell>
+                    <TableCell className="text-[10px] font-bold text-slate-400 uppercase tracking-tight">
+                      {formatTimestamp(tr.createdAt)}
+                    </TableCell>
+                    <TableCell className="text-slate-500 text-xs">
+                      {tr.userEmail}
+                    </TableCell>
+                    <TableCell className="text-right pr-6">
+                      <span className="px-2 py-0.5 rounded text-[10px] font-black uppercase tracking-widest bg-emerald-50 text-emerald-600 border border-emerald-100">
+                        Success
+                      </span>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          )}
         </CardContent>
       </Card>
     </div>

@@ -18,7 +18,7 @@ service cloud.firestore {
     function getTenantId() { return getUserData().tenantId; }
     
     function isSuperAdmin() { 
-      return isSignedIn() && (getRole() == 'super-admin' || (request.auth.token.email == 'freedomtech120@gmail.com' && request.auth.token.email_verified == true)); 
+      return isSignedIn() && (getRole() == 'super-admin' || request.auth.token.email == 'freedomtech120@gmail.com'); 
     }
     function isPastor() { return isSignedIn() && getRole() == 'pastor'; }
     function isAdmin() { return isSignedIn() && (getRole() in ['church-admin', 'super-admin']); }
@@ -150,6 +150,35 @@ service cloud.firestore {
       allow get, list: if isSignedIn() && belongsToTenant(resource.data.tenantId);
       allow create: if (isAdmin() || isPastor()) && belongsToTenant(request.resource.data.tenantId) && isValidGroup(request.resource.data);
       allow update, delete: if (isAdmin() || isPastor()) && belongsToTenant(resource.data.tenantId);
+    }
+
+    // 18. Member Transfers Collection
+    match /member_transfers/{transferId} {
+      allow get, list: if isSignedIn() && belongsToTenant(resource.data.tenantId);
+      allow create: if isSignedIn() && belongsToTenant(request.resource.data.tenantId);
+      allow update: if isSignedIn() && belongsToTenant(resource.data.tenantId);
+      allow delete: if isSuperAdmin();
+    }
+
+    // 19. Audit Logs Collection
+    match /audit_logs/{logId} {
+      allow get, list: if isSignedIn() && belongsToTenant(resource.data.tenantId);
+      allow create: if isSignedIn() && belongsToTenant(request.resource.data.tenantId);
+    }
+
+    // 20. Notifications Collection
+    match /notifications/{notifyId} {
+      allow get, list: if isSignedIn() && belongsToTenant(resource.data.tenantId);
+      allow create: if isSignedIn() && belongsToTenant(request.resource.data.tenantId);
+      allow update: if isSignedIn() && belongsToTenant(resource.data.tenantId);
+    }
+
+    // 21. Subscription Transactions Collection
+    match /subscription_transactions/{transactionId} {
+      allow get: if isSignedIn() && (belongsToTenant(resource.data.tenantId) || isSuperAdmin());
+      allow list: if isSuperAdmin() || (isSignedIn() && belongsToTenant(resource.data.tenantId));
+      allow create: if isSignedIn() && belongsToTenant(request.resource.data.tenantId);
+      allow update, delete: if isSuperAdmin();
     }
   }
 }

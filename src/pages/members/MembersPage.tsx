@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { collection, query, where, onSnapshot, addDoc, serverTimestamp, getDocs } from 'firebase/firestore';
+import { collection, query, where, onSnapshot, addDoc, serverTimestamp, getDocs, updateDoc, doc } from 'firebase/firestore';
 import { db } from '@/src/lib/firebase';
 import { useAuth } from '@/src/contexts/AuthContext';
 import { useTenant } from '@/src/contexts/TenantContext';
@@ -10,7 +10,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Users, UserPlus, Search, Filter, MapPin } from 'lucide-react';
+import { Users, UserPlus, Search, Filter, MapPin, AlertTriangle, Send } from 'lucide-react';
 import { toast } from 'sonner';
 
 export default function MembersPage() {
@@ -32,6 +32,12 @@ export default function MembersPage() {
     branchId: '',
     groupIds: [] as string[]
   });
+
+  const [duplicateMember, setDuplicateMember] = useState<any>(null);
+  const [isDuplicateOpen, setIsDuplicateOpen] = useState(false);
+  const [isTransferFromDuplicateOpen, setIsTransferFromDuplicateOpen] = useState(false);
+  const [transferReason, setTransferReason] = useState('');
+  const [transferToBranchId, setTransferToBranchId] = useState('');
 
   useEffect(() => {
     if (!effectiveTenantId) return;
@@ -77,6 +83,41 @@ export default function MembersPage() {
     if (!effectiveTenantId) return;
 
     try {
+      // 1. Fetch ALL members under this Tenant for duplicate check
+      const mSnap = await getDocs(query(
+        collection(db, 'members'),
+        where('tenantId', '==', effectiveTenantId)
+      ));
+      const allMembers = mSnap.docs.map(doc => ({ id: doc.id, ...doc.data() as any }));
+
+      const duplicate = allMembers.find(m => {
+        // Strip non-numbers from phone for comparison
+        const cleanNewPhone = newMember.phone?.replace(/[^0-9]/g, '');
+        const cleanExistingPhone = m.phone?.replace(/[^0-9]/g, '');
+        
+        if (cleanNewPhone && cleanExistingPhone && cleanNewPhone === cleanExistingPhone) {
+          return true;
+        }
+
+        if (newMember.email && m.email && newMember.email.toLowerCase().trim() === m.email.toLowerCase().trim() && m.email.length > 3) {
+          return true;
+        }
+
+        if (m.firstName.toLowerCase().trim() === newMember.firstName.toLowerCase().trim() &&
+            m.lastName.toLowerCase().trim() === newMember.lastName.toLowerCase().trim()) {
+          return true;
+        }
+
+        return false;
+      });
+
+      if (duplicate) {
+        setDuplicateMember(duplicate);
+        setIsAddOpen(false); // Close add form
+        setIsDuplicateOpen(true); // Open duplicate warning
+        return;
+      }
+
       await addDoc(collection(db, 'members'), {
         ...newMember,
         tenantId: effectiveTenantId,
@@ -89,6 +130,81 @@ export default function MembersPage() {
       setNewMember({ firstName: '', lastName: '', email: '', phone: '', branchId: '', groupIds: [] });
     } catch (error: any) {
       toast.error('Failed to add member: ' + error.message);
+    }
+  };
+
+  const handleDuplicateTransferSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!duplicateMember || !transferToBranchId || !transferReason) {
+      toast.error('Please specify the destination branch and transfer reason');
+      return;
+    }
+
+    if (duplicateMember.branchId === transferToBranchId) {
+      toast.error('Member is already registered in that branch');
+      return;
+    }
+
+    if (duplicateMember.transfer_status === 'pending') {
+      toast.error('This member already has an active pending transfer request');
+      return;
+    }
+
+    const tCode = 'TRF-' + Math.floor(100000 + Math.random() * 900000);
+
+    try {
+      // 2. Lock member
+      await updateDoc(doc(db, 'members', duplicateMember.id), {
+        transfer_status: 'pending'
+      });
+
+      // 1. Create transfer record
+      await addDoc(collection(db, 'member_transfers'), {
+        tenantId: effectiveTenantId,
+        transfer_code: tCode,
+        member_id: duplicateMember.id,
+        member_name: `${duplicateMember.firstName} ${duplicateMember.lastName}`,
+        from_branch_id: duplicateMember.branchId || 'main',
+        to_branch_id: transferToBranchId,
+        initiated_by: profile?.uid || 'unknown',
+        initiated_by_name: profile?.displayName || 'Authorized Pastor',
+        transfer_reason: transferReason,
+        rejection_reason: '',
+        status: 'pending',
+        notes: 'Initiated automatically from branch duplicate screening check',
+        initiated_at: serverTimestamp(),
+        created_at: serverTimestamp(),
+        updated_at: serverTimestamp()
+      });
+
+      // 3. Write compliancy audit log
+      await addDoc(collection(db, 'audit_logs'), {
+        tenantId: effectiveTenantId,
+        userId: profile?.uid || 'unknown',
+        branchId: duplicateMember.branchId || 'main',
+        action: 'Transfer Initiated',
+        details: `Initiated transfer for duplicate detection member ${duplicateMember.firstName} ${duplicateMember.lastName} with code ${tCode}`,
+        createdAt: serverTimestamp()
+      });
+
+      // 4. Send notification
+      await addDoc(collection(db, 'notifications'), {
+        tenantId: effectiveTenantId,
+        branchId: transferToBranchId,
+        title: 'Incoming Member Transfer',
+        message: `A transfer request for duplicate detected member ${duplicateMember.firstName} ${duplicateMember.lastName} (${tCode}) was initiated.`,
+        type: 'transfer_initiated',
+        read: false,
+        createdAt: serverTimestamp()
+      });
+
+      toast.success('Transfer request logged successfully! The receiving branch is notified.');
+      setIsTransferFromDuplicateOpen(false);
+      setDuplicateMember(null);
+      setTransferReason('');
+      setTransferToBranchId('');
+    } catch (error: any) {
+      toast.error('Failed to submit transfer: ' + error.message);
     }
   };
 
@@ -259,6 +375,107 @@ export default function MembersPage() {
           </TableBody>
         </Table>
       </div>
+
+      {/* 1. Duplicate Warning Dialog Board */}
+      <Dialog open={isDuplicateOpen} onOpenChange={setIsDuplicateOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-red-600">
+              <AlertTriangle className="w-5 h-5 animate-pulse" /> Duplicate Member Detected
+            </DialogTitle>
+            <DialogDescription>
+              A member with matching contact details or exact name already exists in another branch of your church organization. Let's prevent double registrations.
+            </DialogDescription>
+          </DialogHeader>
+          {duplicateMember && (
+            <div className="space-y-4 py-4">
+              <div className="p-4 bg-red-50/50 rounded-xl border border-red-100 flex flex-col gap-1">
+                <p className="font-bold text-slate-900 text-base">{duplicateMember.firstName} {duplicateMember.lastName}</p>
+                <p className="text-xs text-slate-500 font-semibold">
+                  Current Branch: <span className="text-indigo-600 font-bold">{branches.find(b => b.id === duplicateMember.branchId)?.name || duplicateMember.branchId || 'Main/Central'}</span>
+                </p>
+                <p className="text-xs text-slate-500">Email: {duplicateMember.email || '—'}</p>
+                <p className="text-xs text-slate-500">Phone: {duplicateMember.phone || '—'}</p>
+              </div>
+
+              <div className="flex flex-col sm:flex-row gap-2 pt-2">
+                <Button 
+                  variant="outline" 
+                  className="flex-1 text-slate-700 border-slate-200"
+                  onClick={() => {
+                    setIsDuplicateOpen(false);
+                    navigate(`/dashboard/members/${duplicateMember.id}`);
+                  }}
+                >
+                  View Existing Profile
+                </Button>
+                <Button 
+                  className="flex-1 bg-indigo-600 hover:bg-indigo-700 font-bold"
+                  onClick={() => {
+                    setIsDuplicateOpen(false);
+                    setIsTransferFromDuplicateOpen(true);
+                  }}
+                >
+                  Request Transfer Instead
+                </Button>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* 2. Request Transfer Modal for Duplicate Match */}
+      <Dialog open={isTransferFromDuplicateOpen} onOpenChange={setIsTransferFromDuplicateOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Request Member Transfer</DialogTitle>
+            <DialogDescription>
+              Request to transfer an existing member from their current branch into another branch.
+            </DialogDescription>
+          </DialogHeader>
+          {duplicateMember && (
+            <form onSubmit={handleDuplicateTransferSubmit} className="space-y-4 py-2">
+              <div className="space-y-1">
+                <Label className="text-xs font-bold text-slate-500 uppercase tracking-widest">Relocate Member</Label>
+                <p className="text-sm font-bold text-slate-950">{duplicateMember.firstName} {duplicateMember.lastName}</p>
+                <p className="text-xs text-slate-400 font-medium">Moving from: {branches.find(b => b.id === duplicateMember.branchId)?.name || 'Main/Central'}</p>
+              </div>
+
+              <div className="space-y-1.5">
+                <Label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Select Destination Branch</Label>
+                <Select value={transferToBranchId} onValueChange={setTransferToBranchId}>
+                  <SelectTrigger className="border-slate-200">
+                    <SelectValue placeholder="Which campus receives them?" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {branches.map(b => (
+                      <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>
+                    ))}
+                    <SelectItem value="main">Main/Central Church</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-1.5">
+                <Label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Reason for Transfer</Label>
+                <Input 
+                  value={transferReason} 
+                  onChange={e => setTransferReason(e.target.value)} 
+                  placeholder="e.g., Relocated to this town for studies" 
+                  required 
+                  className="border-slate-200"
+                />
+              </div>
+
+              <DialogFooter className="pt-2">
+                <Button type="submit" className="w-full bg-indigo-600 hover:bg-indigo-700">
+                  <Send className="w-3.5 h-3.5 mr-1" /> Send Transfer Authorization
+                </Button>
+              </DialogFooter>
+            </form>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

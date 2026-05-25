@@ -2,9 +2,10 @@ import { Outlet, Link, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '@/src/contexts/AuthContext';
 import { useTenant } from '@/src/contexts/TenantContext';
 import { Button } from '@/components/ui/button';
-import { Church, LayoutDashboard, Users, MapPin, Calendar, FileText, Settings, LogOut, Shield, ChevronRight, Briefcase, BarChart3, MessageSquare, Layers, CreditCard } from 'lucide-react';
+import { Church, LayoutDashboard, Users, MapPin, Calendar, FileText, Settings, LogOut, Shield, ChevronRight, Briefcase, BarChart3, MessageSquare, Layers, CreditCard, ArrowLeftRight } from 'lucide-react';
 import { auth } from '@/src/lib/firebase';
 import { cn } from '@/lib/utils';
+import NotificationBell from './NotificationBell';
 
 export function DashboardLayout() {
   const { profile, isSuperAdmin, isAdmin, isPastor } = useAuth();
@@ -12,7 +13,7 @@ export function DashboardLayout() {
   const navigate = useNavigate();
   const location = useLocation();
 
-  const isLocked = subscriptionStatus.isExpired && !location.pathname.includes('/members') && !location.pathname.includes('/settings');
+  const isLocked = !isSuperAdmin && !isPastor && subscriptionStatus.isExpired && !location.pathname.includes('/members') && !location.pathname.includes('/settings');
 
   const userRole = profile?.role || profile?.staffData?.role || '';
 
@@ -22,6 +23,7 @@ export function DashboardLayout() {
     { label: 'Attendance', icon: BarChart3, href: '/dashboard/attendance', roles: ['church-admin', 'pastor', 'worker', 'super-admin'] },
     { label: 'Branches', icon: MapPin, href: '/dashboard/branches', roles: ['church-admin', 'super-admin'] },
     { label: 'Members', icon: Users, href: '/dashboard/members', roles: ['church-admin', 'pastor', 'worker', 'super-admin'] },
+    { label: 'Member Transfers', icon: ArrowLeftRight, href: '/dashboard/transfers', roles: ['super-admin', 'church-admin', 'pastor'] },
     { label: 'Groups & Ministries', icon: Layers, href: '/dashboard/groups', roles: ['church-admin', 'pastor', 'super-admin'] },
     { label: 'Staff & Pastors', icon: Briefcase, href: '/dashboard/staff', roles: ['church-admin', 'super-admin'] },
     { label: 'Bulk Communications', icon: MessageSquare, href: '/dashboard/communications', roles: ['church-admin', 'pastor', 'super-admin'] },
@@ -95,20 +97,37 @@ export function DashboardLayout() {
           <NavGroup title="System" items={systemItems} />
         </nav>
 
-        <div className="p-4 border-t border-slate-100 bg-slate-50/50">
-          <div className={cn(
-            "rounded-xl p-4 text-white shadow-md relative overflow-hidden group cursor-pointer transition-all hover:scale-[1.02]",
-            subscriptionStatus.isExpired ? "bg-red-600" : "bg-indigo-600"
-          )} onClick={() => navigate('/dashboard/settings')}>
-            <div className="absolute top-0 right-0 w-16 h-16 bg-white/10 rounded-full -mr-8 -mt-8 blur-2xl group-hover:bg-white/20 transition-all duration-500"></div>
-            <div className="text-[10px] uppercase opacity-80 font-bold tracking-widest">
-              {subscriptionStatus.isTrial ? (subscriptionStatus.isExpired ? 'Trial Expired' : `Trial: ${subscriptionStatus.daysRemaining} days left`) : `Plan: ${tenant?.subscriptionTier || 'Free'}`}
-            </div>
-            <div className="text-xs mt-1 font-medium italic opacity-90">
-              {subscriptionStatus.isExpired ? 'Activate Account Now' : 'Manage Subscription'}
-            </div>
+        {!isPastor && (
+          <div className="p-4 border-t border-slate-100 bg-slate-50/50">
+            {isSuperAdmin ? (
+              <div className="rounded-xl p-4 text-white bg-gradient-to-br from-slate-900 to-indigo-950 border border-indigo-500/10 shadow-md relative overflow-hidden group cursor-pointer transition-all hover:scale-[1.02]" onClick={() => navigate('/dashboard/settings')}>
+                <div className="absolute top-0 right-0 w-16 h-16 bg-white/10 rounded-full -mr-8 -mt-8 blur-xl group-hover:scale-110 transition-all duration-500"></div>
+                <div className="text-[10px] uppercase opacity-90 font-black tracking-widest text-indigo-300">
+                  SYSTEM OWNER
+                </div>
+                <div className="text-xs mt-1 font-bold">
+                  Lifetime Super Admin
+                </div>
+                <div className="text-[9px] mt-0.5 opacity-85 italic">
+                  Subscription Bypassed
+                </div>
+              </div>
+            ) : (
+              <div className={cn(
+                "rounded-xl p-4 text-white shadow-md relative overflow-hidden group cursor-pointer transition-all hover:scale-[1.02]",
+                subscriptionStatus.isExpired ? "bg-red-600" : "bg-indigo-600"
+              )} onClick={() => navigate('/dashboard/settings')}>
+                <div className="absolute top-0 right-0 w-16 h-16 bg-white/10 rounded-full -mr-8 -mt-8 blur-2xl group-hover:bg-white/20 transition-all duration-500"></div>
+                <div className="text-[10px] uppercase opacity-80 font-bold tracking-widest">
+                  {subscriptionStatus.isTrial ? (subscriptionStatus.isExpired ? 'Trial Expired' : `Trial: ${subscriptionStatus.daysRemaining} days left`) : `Plan: ${tenant?.subscriptionTier || 'Free'}`}
+                </div>
+                <div className="text-xs mt-1 font-medium italic opacity-90">
+                  {subscriptionStatus.isExpired ? 'Activate Account Now' : 'Manage Subscription'}
+                </div>
+              </div>
+            )}
           </div>
-        </div>
+        )}
       </aside>
 
       {/* Main Container */}
@@ -157,6 +176,7 @@ export function DashboardLayout() {
                 )}
               </div>
             </div>
+            <NotificationBell />
             <Button variant="ghost" size="icon" className="text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-full" onClick={handleLogout}>
               <LogOut className="w-4 h-4" />
             </Button>
@@ -173,7 +193,7 @@ export function DashboardLayout() {
                 </div>
                 <div className="space-y-2">
                   <h2 className="text-2xl font-black text-slate-900">Subscription Required</h2>
-                  <p className="text-slate-500 text-sm">Your 7-day free trial has expired. To continue using the branch manager, finances, and groups, please activate your plan.</p>
+                  <p className="text-slate-500 text-sm">Your registered church's free trial has expired. To continue using the branch manager, finances, and groups, please activate your plan. Under our model, all church campuses and branches benefit from your central subscription and do not need separate payments.</p>
                 </div>
                 <div className="bg-slate-50 p-4 rounded-xl border border-slate-100 flex items-center gap-3 text-left">
                   <div className="w-8 h-8 rounded-full bg-emerald-100 flex items-center justify-center shrink-0">
@@ -216,6 +236,7 @@ const navItems = [
   { label: 'My Branch', icon: MapPin, href: '/dashboard/branch' },
   { label: 'Attendance', icon: BarChart3, href: '/dashboard/attendance' },
   { label: 'Members', icon: Users, href: '/dashboard/members' },
+  { label: 'Member Transfers', icon: ArrowLeftRight, href: '/dashboard/transfers' },
   { label: 'Groups & Ministries', icon: Layers, href: '/dashboard/groups' },
   { label: 'Staff & Pastors', icon: Briefcase, href: '/dashboard/staff' },
   { label: 'Branches', icon: MapPin, href: '/dashboard/branches' },

@@ -52,6 +52,10 @@
       "properties": {
         "tenantId": { "type": "string" },
         "branchId": { "type": "string" },
+        "current_branch_id": { "type": "string" },
+        "previous_branch_id": { "type": "string" },
+        "transfer_status": { "type": "string", "enum": ["none", "pending", "approved", "rejected", "cancelled"] },
+        "date_joined_current_branch": { "type": "string", "format": "date-time" },
         "firstName": { "type": "string" },
         "lastName": { "type": "string" },
         "email": { "type": "string" },
@@ -215,6 +219,62 @@
         "createdAt": { "type": "string", "format": "date-time" }
       },
       "required": ["tenantId", "name", "category"]
+    },
+    "MemberTransfer": {
+      "title": "Member Transfer",
+      "description": "Records details of official member transfers between branch locations.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "tenantId": { "type": "string" },
+        "transfer_code": { "type": "string" },
+        "member_id": { "type": "string" },
+        "from_branch_id": { "type": "string" },
+        "to_branch_id": { "type": "string" },
+        "initiated_by": { "type": "string", "description": "User ID of pastor who initiated" },
+        "approved_by": { "type": "string", "description": "User ID of pastor who approved" },
+        "rejected_by": { "type": "string", "description": "User ID of pastor who rejected" },
+        "transfer_reason": { "type": "string" },
+        "rejection_reason": { "type": "string" },
+        "status": { "type": "string", "enum": ["pending", "approved", "rejected", "cancelled"] },
+        "notes": { "type": "string" },
+        "initiated_at": { "type": "string", "format": "date-time" },
+        "approved_at": { "type": "string", "format": "date-time" },
+        "rejected_at": { "type": "string", "format": "date-time" },
+        "created_at": { "type": "string", "format": "date-time" },
+        "updated_at": { "type": "string", "format": "date-time" }
+      },
+      "required": ["tenantId", "member_id", "from_branch_id", "to_branch_id", "transfer_code", "status"]
+    },
+    "AuditLog": {
+      "title": "Audit Log",
+      "description": "History of activities and modifications to audit compliance.",
+      "type": "object",
+      "properties": {
+        "tenantId": { "type": "string" },
+        "userId": { "type": "string" },
+        "branchId": { "type": "string" },
+        "action": { "type": "string" },
+        "details": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["tenantId", "userId", "action"]
+    },
+    "Notification": {
+      "title": "Notification",
+      "description": "System or transfer alerts directed to specific users or branches.",
+      "type": "object",
+      "properties": {
+        "tenantId": { "type": "string" },
+        "branchId": { "type": "string" },
+        "userId": { "type": "string" },
+        "title": { "type": "string" },
+        "message": { "type": "string" },
+        "type": { "type": "string" },
+        "read": { "type": "boolean" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["tenantId", "title", "message", "read"]
     }
   },
   "firestore": {
@@ -273,6 +333,18 @@
     "groups": {
       "schema": "Group",
       "description": "Church ministries and departments"
+    },
+    "member_transfers": {
+      "schema": "MemberTransfer",
+      "description": "Relocation and transfer actions for members"
+    },
+    "audit_logs": {
+      "schema": "AuditLog",
+      "description": "System compliance trace logging"
+    },
+    "notifications": {
+      "schema": "Notification",
+      "description": "System alerts and notifications"
     }
   }
 }

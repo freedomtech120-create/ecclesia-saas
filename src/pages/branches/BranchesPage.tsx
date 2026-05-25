@@ -10,7 +10,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { MapPin, Plus, Phone, Mail, User } from 'lucide-react';
+import { MapPin, Plus, Phone, Mail, User, Shield } from 'lucide-react';
 import { toast } from 'sonner';
 
 export default function BranchesPage() {
@@ -81,6 +81,18 @@ export default function BranchesPage() {
 
   return (
     <div className="space-y-8">
+      <div className="bg-gradient-to-r from-indigo-50 to-sky-50 border border-indigo-100/50 rounded-2xl p-5 flex items-start gap-4 shadow-sm">
+        <div className="w-10 h-10 bg-indigo-600 rounded-xl flex items-center justify-center text-white shrink-0 shadow-sm shadow-indigo-100">
+          <Shield className="w-5 h-5 text-white" />
+        </div>
+        <div>
+          <h3 className="text-xs font-black text-indigo-950 uppercase tracking-widest">Unified Church Subscription Coverage</h3>
+          <p className="text-xs text-indigo-700/95 mt-1 font-medium leading-relaxed">
+            Your Ecclesia subscription is active for your registered church. Under this model, <strong>all of your branches automatically inherit and benefit from your central subscription</strong>, requiring no individual setup or separate branch-level payments.
+          </p>
+        </div>
+      </div>
+
       <div className="flex justify-between items-end">
         <div>
           <h1 className="text-3xl font-bold tracking-tight text-slate-900">Branches</h1>

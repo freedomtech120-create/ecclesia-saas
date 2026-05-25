@@ -10,6 +10,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { Label } from '@/components/ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { 
   ArrowLeft, 
   User, 
@@ -25,7 +26,8 @@ import {
   Users,
   Plus,
   MessageSquare,
-  ClipboardList
+  ClipboardList,
+  ArrowLeftRight
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
@@ -159,12 +161,19 @@ export default function MemberProfilePage() {
   const { memberId } = useParams();
   const { effectiveTenantId } = useTenant();
   const navigate = useNavigate();
+  const { profile } = useAuth();
+  
   const [member, setMember] = useState<any>(null);
   const [groups, setGroups] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [editMode, setEditMode] = useState(false);
   const [finances, setFinances] = useState<any[]>([]);
   
+  const [branches, setBranches] = useState<any[]>([]);
+  const [isTransferOpen, setIsTransferOpen] = useState(false);
+  const [targetBranchId, setTargetBranchId] = useState('');
+  const [transferReason, setTransferReason] = useState('');
+
   const [formData, setFormData] = useState({
     firstName: '',
     lastName: '',
@@ -197,6 +206,10 @@ export default function MemberProfilePage() {
             status: data.status || 'active',
             groupIds: data.groupIds || []
           });
+
+          // Fetch branches list for relocations dropdown
+          const bSnap = await getDocs(query(collection(db, 'branches'), where('tenantId', '==', effectiveTenantId)));
+          setBranches(bSnap.docs.map(d => ({ id: d.id, ...d.data() })));
 
           // Fetch all groups for assignment
           if (data.tenantId) {
@@ -241,6 +254,84 @@ export default function MemberProfilePage() {
     }
   };
 
+  const handleProfileTransfer = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!effectiveTenantId || !memberId) return;
+    if (!targetBranchId || !transferReason) {
+      toast.error("Please fill in all details");
+      return;
+    }
+
+    if (member.branchId === targetBranchId) {
+      toast.error("Member is already in that active branch");
+      return;
+    }
+
+    if (member.transfer_status === 'pending') {
+      toast.error("This member already has an active pending transfer");
+      return;
+    }
+
+    const tCode = 'TRF-' + Math.floor(100000 + Math.random() * 900000);
+
+    try {
+      // 1. Lock member state
+      await updateDoc(doc(db, 'members', memberId), {
+        transfer_status: 'pending'
+      });
+
+      // 2. Put record
+      await addDoc(collection(db, 'member_transfers'), {
+        tenantId: effectiveTenantId,
+        transfer_code: tCode,
+        member_id: memberId,
+        member_name: `${member.firstName} ${member.lastName}`,
+        from_branch_id: member.branchId || 'main',
+        to_branch_id: targetBranchId,
+        initiated_by: profile?.uid || 'unknown',
+        initiated_by_name: profile?.displayName || 'Authorized Pastor',
+        transfer_reason: transferReason,
+        rejection_reason: '',
+        status: 'pending',
+        notes: 'Initiated directly from member profile screen controls',
+        initiated_at: serverTimestamp(),
+        created_at: serverTimestamp(),
+        updated_at: serverTimestamp()
+      });
+
+      // 3. Post audit trail
+      await addDoc(collection(db, 'audit_logs'), {
+        tenantId: effectiveTenantId,
+        userId: profile?.uid || 'unknown',
+        branchId: member.branchId || 'main',
+        action: 'Transfer Initiated',
+        details: `Initiated transfer for ${member.firstName} ${member.lastName} with code ${tCode}`,
+        createdAt: serverTimestamp()
+      });
+
+      // 4. Send alert
+      await addDoc(collection(db, 'notifications'), {
+        tenantId: effectiveTenantId,
+        branchId: targetBranchId,
+        title: 'Incoming Member Transfer',
+        message: `A transfer request for ${member.firstName} ${member.lastName} (${tCode}) was logged.`,
+        type: 'transfer_initiated',
+        read: false,
+        createdAt: serverTimestamp()
+      });
+
+      toast.success('Campus transfer request submitted! The receiving pastor is notified.');
+      setIsTransferOpen(false);
+      setTransferReason('');
+      setTargetBranchId('');
+      
+      // Update local member object immediately
+      setMember({ ...member, transfer_status: 'pending' });
+    } catch (error: any) {
+      toast.error('Failed to submit: ' + error.message);
+    }
+  };
+
   if (loading) return <div className="p-8 text-center text-slate-400">Loading profile...</div>;
 
   return (
@@ -260,12 +351,67 @@ export default function MemberProfilePage() {
                 {member.status || 'Active'}
               </span>
               <span className="text-xs text-slate-400 font-medium italic">Member since {member.joinedAt ? format(member.joinedAt.toDate(), 'MMMM yyyy') : 'Recently'}</span>
+              {member.transfer_status === 'pending' && (
+                <span className="px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-amber-50 text-amber-600 border border-amber-100 animate-pulse">
+                  Transfer Pending
+                </span>
+              )}
             </div>
           </div>
         </div>
         <div className="ml-auto flex gap-2">
           {!editMode ? (
-            <Button onClick={() => setEditMode(true)} className="bg-indigo-600 hover:bg-indigo-700 shadow-lg shadow-indigo-100">Edit Profile</Button>
+            <>
+              <Dialog open={isTransferOpen} onOpenChange={setIsTransferOpen}>
+                <DialogTrigger render={
+                  <Button variant="outline" className="border-indigo-100 text-indigo-700 hover:bg-indigo-50 font-bold gap-2">
+                    <ArrowLeftRight className="w-4 h-4" /> Transfer Campus
+                  </Button>
+                } />
+                <DialogContent className="sm:max-w-md">
+                  <DialogHeader>
+                    <DialogTitle>Transfer Campus</DialogTitle>
+                    <DialogDescription>
+                      Initiate a formal campus transfer for {member.firstName} {member.lastName}. Corrects duplicate allocations cleanly.
+                    </DialogDescription>
+                  </DialogHeader>
+                  <form onSubmit={handleProfileTransfer} className="space-y-4 py-2">
+                    <div className="space-y-1.5">
+                      <Label className="text-xs font-bold text-slate-500 uppercase tracking-widest">Select Target Branch</Label>
+                      <Select value={targetBranchId} onValueChange={setTargetBranchId}>
+                        <SelectTrigger className="border-slate-200">
+                          <SelectValue placeholder="Which campus is receiving them?" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {branches.map(b => (
+                            <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>
+                          ))}
+                          <SelectItem value="main">Main/Central Church</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <Label className="text-xs font-bold text-slate-500 uppercase tracking-widest">Reason for Transfer</Label>
+                      <Input 
+                        value={transferReason} 
+                        onChange={e => setTransferReason(e.target.value)} 
+                        placeholder="e.g., Relocated city for career transition" 
+                        required 
+                        className="border-slate-200"
+                      />
+                    </div>
+
+                    <DialogFooter className="pt-2">
+                      <Button type="submit" className="w-full bg-indigo-600 hover:bg-indigo-700 font-bold">
+                         Submit Transfer
+                      </Button>
+                    </DialogFooter>
+                  </form>
+                </DialogContent>
+              </Dialog>
+              <Button onClick={() => setEditMode(true)} className="bg-indigo-600 hover:bg-indigo-700 shadow-lg shadow-indigo-100">Edit Profile</Button>
+            </>
           ) : (
             <>
               <Button variant="outline" onClick={() => setEditMode(false)}>Cancel</Button>

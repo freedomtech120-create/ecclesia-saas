@@ -44,6 +44,11 @@ export function TenantProvider({ children }: { children: React.ReactNode }) {
   const [loading, setLoading] = useState(true);
 
   const subscriptionStatus = (() => {
+    // If the logged in user is the super-admin or app owner, subscription is always fully active and never trial/expired.
+    if (isSuperAdmin) {
+      return { isActive: true, isTrial: false, isExpired: false, daysRemaining: 99999 };
+    }
+
     if (!tenant) return { isActive: false, isTrial: false, isExpired: false, daysRemaining: 0 };
     
     const isPaid = tenant.subscriptionTier !== 'free';
