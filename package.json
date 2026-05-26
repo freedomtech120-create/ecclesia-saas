@@ -6,9 +6,9 @@
   "scripts": {
     "dev": "vite --host 0.0.0.0 --port 3000",
     "dev:fullstack": "tsx server.ts",
-    "build": "vite build && npx cap copy",
+    "build": "tsc && vite build && esbuild server.ts --bundle --platform=node --format=esm --packages=external --sourcemap --outfile=dist/server.js",
     "build:server": "vite build && esbuild server.ts --bundle --platform=node --format=cjs --outfile=dist/server.cjs --external:vite",
-    "start": "node dist/server.cjs",
+    "start": "node dist/server.js",
     "cap:sync": "npx cap sync",
     "cap:open": "npx cap open android",
     "clean": "rm -rf dist",
