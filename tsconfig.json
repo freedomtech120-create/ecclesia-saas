@@ -1,34 +1,28 @@
 {
   "compilerOptions": {
-    /* Basic Options */
+    /* Base Options */
     "target": "ES2022",
     "module": "ESNext",
     "lib": ["ES2022", "DOM", "DOM.Iterable"],
     "moduleResolution": "bundler",
     "jsx": "react-jsx",
+    "allowJs": true,
     
-    /* Strict Type-Checking Options */
-    "strict": true, // Enables all strict flags above
+    /* Strictness & Safety */
+    "strict": true,
     "noImplicitAny": true,
     "strictNullChecks": true,
-    "strictFunctionTypes": true,
-    "strictBindCallApply": true,
-    "strictPropertyInitialization": true,
-    "noImplicitThis": true,
-    "alwaysStrict": true,
-
-    /* Full-Stack Compatibility */
-    "esModuleInterop": true, // Allows default imports from CommonJS modules (Node.js compatibility)
-    "skipLibCheck": true,   // Speeds up build by skipping type-checking of declaration files
-    "forceConsistentCasingInFileNames": true, // Prevents cross-OS import bugs
+    "esModuleInterop": true,
+    "forceConsistentCasingInFileNames": true,
     "isolatedModules": true,
-    
-    /* Paths & Types */
-    "types": ["vite/client", "node"], // Essential for browser + Node environments
+    "skipLibCheck": true,
+    "noEmit": true,
+
+    /* Environment Support */
+    "types": ["vite/client", "node"],
     "paths": {
-      "@/*": ["./src/*"]
-    },
-    "noEmit": true
+      "@/*": ["./*"]
+    }
   },
   "include": ["src", "server.ts", "vite.config.ts"],
   "exclude": ["node_modules", "dist"]
