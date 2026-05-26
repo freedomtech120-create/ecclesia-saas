@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { Link } from 'react-router-dom';
 import { collection, query, where, onSnapshot, updateDoc, doc, limit, orderBy } from 'firebase/firestore';
 import { db } from '@/src/lib/firebase';
 import { useAuth } from '@/src/contexts/AuthContext';
@@ -79,8 +80,10 @@ export default function NotificationBell() {
       case 'transfer_initiated':
         return <RefreshCw className="w-4 h-4 text-amber-500 animate-spin-slow" />;
       case 'transfer_approved':
+      case 'payment_approved':
         return <Check className="w-4 h-4 text-emerald-500 animate-pulse" />;
       case 'transfer_rejected':
+      case 'payment_rejected':
         return <AlertCircle className="w-4 h-4 text-red-500" />;
       case 'transfer_cancelled':
         return <AlertCircle className="w-4 h-4 text-slate-400" />;
@@ -162,12 +165,21 @@ export default function NotificationBell() {
                       <p className="text-[11px] text-slate-500 mt-0.5 leading-relaxed">{n.message}</p>
                       <span className="text-[9px] text-slate-400 font-bold uppercase tracking-wider block mt-1.5 flex items-center gap-1">
                         <Calendar className="w-2.5 h-2.5" />
-                        {n.createdAt ? formatDistanceToNow(n.createdAt.toDate(), { addSuffix: true }) : 'Just now'}
+                        {n.createdAt ? formatDistanceToNow(n.createdAt.toDate ? n.createdAt.toDate() : new Date(n.createdAt), { addSuffix: true }) : 'Just now'}
                       </span>
                     </div>
                   </div>
                 ))
               )}
+            </div>
+            <div className="p-2 border-t border-slate-100 bg-slate-50 text-center">
+              <Link 
+                to="/dashboard/notifications" 
+                onClick={() => setIsOpen(false)}
+                className="text-[10px] font-black tracking-widest uppercase text-indigo-600 hover:text-indigo-800 block py-1.5 transition-colors"
+              >
+                Open Notification Center
+              </Link>
             </div>
           </div>
         </>

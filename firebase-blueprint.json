@@ -275,6 +275,193 @@
         "createdAt": { "type": "string", "format": "date-time" }
       },
       "required": ["tenantId", "title", "message", "read"]
+    },
+    "BranchLevel": {
+      "title": "Branch Level Hierarchy",
+      "description": "Configurable levels of branch structure.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "tenantId": { "type": "string" },
+        "name": { "type": "string" },
+        "assessmentAmount": { "type": "number" },
+        "eventObligations": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["tenantId", "name", "assessmentAmount"]
+    },
+    "Assessment": {
+      "title": "Central Assessment",
+      "description": "Central Church assessments created by national office.",
+      "type": "object",
+      "properties": {
+        "tenantId": { "type": "string" },
+        "title": { "type": "string" },
+        "description": { "type": "string" },
+        "amount": { "type": "number" },
+        "frequency": { "type": "string", "enum": ["weekly", "monthly", "quarterly", "yearly", "one-time"] },
+        "dueDate": { "type": "string", "format": "date-time" },
+        "assignType": { "type": "string", "enum": ["all", "branch-level", "region", "specific-branch"] },
+        "assignValue": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["tenantId", "title", "amount", "frequency", "dueDate"]
+    },
+    "AssessmentPayment": {
+      "title": "Assessment Payment",
+      "description": "Proof of payment made by branches for assessments.",
+      "type": "object",
+      "properties": {
+        "tenantId": { "type": "string" },
+        "branchId": { "type": "string" },
+        "assessmentId": { "type": "string" },
+        "amount": { "type": "number" },
+        "status": { "type": "string", "enum": ["pending", "approved", "rejected"] },
+        "paymentReceiptUrl": { "type": "string" },
+        "notes": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["tenantId", "branchId", "assessmentId", "amount", "status"]
+    },
+    "Event": {
+      "title": "Church Event",
+      "description": "National, Regional, District, Group, or local events with contribution parameters.",
+      "type": "object",
+      "properties": {
+        "tenantId": { "type": "string" },
+        "branchId": { "type": "string" },
+        "title": { "type": "string" },
+        "description": { "type": "string" },
+        "eventType": { "type": "string", "enum": ["national", "regional", "district", "group", "local"] },
+        "organizer": { "type": "string" },
+        "startDate": { "type": "string", "format": "date" },
+        "endDate": { "type": "string", "format": "date" },
+        "location": { "type": "string" },
+        "bannerUrl": { "type": "string" },
+        "contributionAmount": { "type": "number" },
+        "contribType": { "type": "string", "enum": ["fixed", "branch-level", "attendance-based", "percentage"] },
+        "paymentDeadline": { "type": "string", "format": "date-time" },
+        "approvalStatus": { "type": "string", "enum": ["draft", "pending_district", "pending_regional", "approved", "rejected"] },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["tenantId", "title", "eventType", "startDate", "endDate", "approvalStatus"]
+    },
+    "EventContribution": {
+      "title": "Event Contribution",
+      "description": "Financial contribution tracks for branches responding to an event.",
+      "type": "object",
+      "properties": {
+        "tenantId": { "type": "string" },
+        "branchId": { "type": "string" },
+        "eventId": { "type": "string" },
+        "amount": { "type": "number" },
+        "status": { "type": "string", "enum": ["pending", "paid", "partial", "overdue"] },
+        "paymentReceiptUrl": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["tenantId", "branchId", "eventId", "amount", "status"]
+    },
+    "EventAttendance": {
+      "title": "Event Attendance",
+      "description": "Registers headcounts and detailed RSVP/attendance for events.",
+      "type": "object",
+      "properties": {
+        "tenantId": { "type": "string" },
+        "eventId": { "type": "string" },
+        "branchId": { "type": "string" },
+        "memberId": { "type": "string" },
+        "status": { "type": "string", "enum": ["registered", "attended", "absent"] },
+        "createdAt": { "type": "string", "format": "date" }
+      },
+      "required": ["tenantId", "eventId", "status"]
+    },
+    "FeatureSettings": {
+      "title": "Configurable Feature Toggle Settings",
+      "description": "Tenant wide parameters to activate or deactivate modules.",
+      "type": "object",
+      "properties": {
+        "tenantId": { "type": "string" },
+        "enableAssessments": { "type": "boolean" },
+        "enableArrearsTracking": { "type": "boolean" },
+        "enableAutoReminders": { "type": "boolean" },
+        "enablePaymentRanking": { "type": "boolean" },
+        "enableEventCalendar": { "type": "boolean" },
+        "enableNationalCalendar": { "type": "boolean" },
+        "enableRegionalCalendar": { "type": "boolean" },
+        "enableDistrictCalendar": { "type": "boolean" },
+        "enableGroupCalendar": { "type": "boolean" },
+        "enableLocalCalendar": { "type": "boolean" },
+        "enableEventContributions": { "type": "boolean" },
+        "eventApprovalFlow": { "type": "string", "enum": ["none", "district", "regional", "national"] }
+      },
+      "required": ["tenantId"]
+    },
+    "PaymentTransaction": {
+      "title": "Payment Transaction",
+      "description": "Records details of official payment transaction reference submissions and verifications.",
+      "type": "object",
+      "properties": {
+        "tenantId": { "type": "string" },
+        "transactionId": { "type": "string" },
+        "assessmentId": { "type": "string" },
+        "branchId": { "type": "string" },
+        "amount": { "type": "number" },
+        "paymentMethod": { "type": "string" },
+        "status": { "type": "string", "enum": ["Pending", "Under Review", "Approved", "Rejected", "Partial Payment", "Overdue"] },
+        "submittedBy": { "type": "string" },
+        "verifiedBy": { "type": "string" },
+        "verificationNotes": { "type": "string" },
+        "receiptUrl": { "type": "string" },
+        "senderName": { "type": "string" },
+        "senderAccount": { "type": "string" },
+        "paymentDate": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["tenantId", "transactionId", "assessmentId", "branchId", "amount", "paymentMethod", "status"]
+    },
+    "Receipt": {
+      "title": "Receipt",
+      "description": "Digital receipts generated on completed, approved assessment transactions.",
+      "type": "object",
+      "properties": {
+        "tenantId": { "type": "string" },
+        "receiptNumber": { "type": "string" },
+        "transactionId": { "type": "string" },
+        "paymentId": { "type": "string" },
+        "branchId": { "type": "string" },
+        "pdfUrl": { "type": "string" },
+        "generatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["tenantId", "receiptNumber", "transactionId", "branchId", "generatedAt"]
+    },
+    "RefundRequest": {
+      "title": "Refund Request",
+      "description": "Branch requests for overpayment refunds on calculated central assessments.",
+      "type": "object",
+      "properties": {
+        "tenantId": { "type": "string" },
+        "branchId": { "type": "string" },
+        "branchName": { "type": "string" },
+        "assessmentId": { "type": "string" },
+        "assessmentTitle": { "type": "string" },
+        "totalPaid": { "type": "number" },
+        "targetAmount": { "type": "number" },
+        "overpaidAmount": { "type": "number" },
+        "provider": { "type": "string" },
+        "account": { "type": "string" },
+        "accountName": { "type": "string" },
+        "reason": { "type": "string" },
+        "status": { "type": "string", "enum": ["Pending", "Approved", "Rejected"] },
+        "submittedBy": { "type": "string" },
+        "submittedByUid": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" },
+        "adminNotes": { "type": "string" },
+        "processedBy": { "type": "string" },
+        "processedByUid": { "type": "string" }
+      },
+      "required": ["tenantId", "branchId", "assessmentId", "overpaidAmount", "status"]
     }
   },
   "firestore": {
@@ -345,6 +532,46 @@
     "notifications": {
       "schema": "Notification",
       "description": "System alerts and notifications"
+    },
+    "branch_levels": {
+      "schema": "BranchLevel",
+      "description": "Levels of branches (District, Regional, etc.) with billing assessment parameters"
+    },
+    "assessments": {
+      "schema": "Assessment",
+      "description": "Assessments initiated by central/headquarters"
+    },
+    "assessment_payments": {
+      "schema": "AssessmentPayment",
+      "description": "Payments and receipts submitted by branches against assessments"
+    },
+    "events": {
+      "schema": "Event",
+      "description": "National, Regional, District, Group, or local events"
+    },
+    "event_contributions": {
+      "schema": "EventContribution",
+      "description": "Payments and allocations for event specific contributions"
+    },
+    "event_attendance": {
+      "schema": "EventAttendance",
+      "description": "RSVP listing for events"
+    },
+    "feature_settings": {
+      "schema": "FeatureSettings",
+      "description": "Feature toggles activation controls"
+    },
+    "paymentTransactions": {
+      "schema": "PaymentTransaction",
+      "description": "Payment transactions submitted by branches and verified by admins."
+    },
+    "receipts": {
+      "schema": "Receipt",
+      "description": "Generated digital receipts for approved payments"
+    },
+    "refund_requests": {
+      "schema": "RefundRequest",
+      "description": "Refund requests submitted by branches and evaluated by HQ Treasury admins."
     }
   }
 }

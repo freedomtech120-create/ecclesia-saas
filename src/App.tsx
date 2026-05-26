@@ -23,6 +23,9 @@ import LandingPage from './pages/public/LandingPage';
 import PublicFormPage from './pages/public/PublicFormPage';
 import SettingsPage from './pages/settings/SettingsPage';
 import TransfersPage from './pages/transfers/TransfersPage';
+import AssessmentsPage from './pages/assessments/AssessmentsPage';
+import EventsPage from './pages/events/EventsPage';
+import NotificationCenterPage from './pages/notifications/NotificationCenterPage';
 
 import AdminPanel from './pages/admin/AdminPanel';
 
@@ -204,7 +207,10 @@ export default function App() {
               <Route path="communications" element={<CommunicationsPage />} />
               <Route path="groups" element={<GroupsPage />} />
               <Route path="transfers" element={<TransfersPage />} />
+              <Route path="assessments" element={<AssessmentsPage />} />
+              <Route path="events" element={<EventsPage />} />
               <Route path="settings" element={<SettingsPage />} />
+              <Route path="notifications" element={<NotificationCenterPage />} />
             </Route>
 
             <Route path="/admin" element={

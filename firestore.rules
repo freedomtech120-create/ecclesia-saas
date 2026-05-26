@@ -180,5 +180,78 @@ service cloud.firestore {
       allow create: if isSignedIn() && belongsToTenant(request.resource.data.tenantId);
       allow update, delete: if isSuperAdmin();
     }
+
+    // 22. Branch Levels Hierarchy Collection
+    match /branch_levels/{levelId} {
+      allow get, list: if isSignedIn() && belongsToTenant(resource.data.tenantId);
+      allow create: if (isAdmin() || isSuperAdmin()) && belongsToTenant(request.resource.data.tenantId);
+      allow update, delete: if (isAdmin() || isSuperAdmin()) && belongsToTenant(resource.data.tenantId);
+    }
+
+    // 23. Assessments Collection
+    match /assessments/{assessmentId} {
+      allow get, list: if isSignedIn() && belongsToTenant(resource.data.tenantId);
+      allow create: if (isAdmin() || isSuperAdmin()) && belongsToTenant(request.resource.data.tenantId);
+      allow update, delete: if (isAdmin() || isSuperAdmin()) && belongsToTenant(resource.data.tenantId);
+    }
+
+    // 24. Assessment Payments Collection
+    match /assessment_payments/{paymentId} {
+      allow get, list: if isSignedIn() && belongsToTenant(resource.data.tenantId);
+      allow create: if isSignedIn() && belongsToTenant(request.resource.data.tenantId);
+      allow update, delete: if (isAdmin() || isSuperAdmin()) && belongsToTenant(resource.data.tenantId);
+    }
+
+    // 25. Events Collection
+    match /events/{eventId} {
+      allow get, list: if isSignedIn() && belongsToTenant(resource.data.tenantId);
+      allow create: if isSignedIn() && belongsToTenant(request.resource.data.tenantId);
+      allow update: if isSignedIn() && belongsToTenant(resource.data.tenantId);
+      allow delete: if (isAdmin() || isSuperAdmin()) && belongsToTenant(resource.data.tenantId);
+    }
+
+    // 26. Event Contributions Collection
+    match /event_contributions/{contributionId} {
+      allow get, list: if isSignedIn() && belongsToTenant(resource.data.tenantId);
+      allow create: if isSignedIn() && belongsToTenant(request.resource.data.tenantId);
+      allow update: if isSignedIn() && belongsToTenant(resource.data.tenantId);
+      allow delete: if (isAdmin() || isSuperAdmin()) && belongsToTenant(resource.data.tenantId);
+    }
+
+    // 27. Event Attendance RSVP Collection
+    match /event_attendance/{attendanceId} {
+      allow get, list: if isSignedIn() && belongsToTenant(resource.data.tenantId);
+      allow create: if isSignedIn() && belongsToTenant(request.resource.data.tenantId);
+      allow update, delete: if isSignedIn() && belongsToTenant(resource.data.tenantId);
+    }
+
+    // 28. Configurable Feature Toggle Settings Collection
+    match /feature_settings/{settingsId} {
+      allow get, list: if isSignedIn() && belongsToTenant(settingsId);
+      allow create: if isSignedIn() && belongsToTenant(settingsId) && request.resource.data.tenantId == settingsId;
+      allow update: if (isAdmin() || isSuperAdmin()) && belongsToTenant(settingsId);
+    }
+
+    // 29. Payment Transactions Collection
+    match /paymentTransactions/{transactionId} {
+      allow get, list: if isSignedIn() && belongsToTenant(resource.data.tenantId);
+      allow create: if isSignedIn() && belongsToTenant(request.resource.data.tenantId);
+      allow update, delete: if isSignedIn() && belongsToTenant(resource.data.tenantId);
+    }
+
+    // 30. Receipts Collection
+    match /receipts/{receiptId} {
+      allow get, list: if isSignedIn() && belongsToTenant(resource.data.tenantId);
+      allow create: if isSignedIn() && belongsToTenant(request.resource.data.tenantId);
+      allow update, delete: if (isAdmin() || isSuperAdmin()) && belongsToTenant(resource.data.tenantId);
+    }
+
+    // 31. Refund Requests Collection
+    match /refund_requests/{refundId} {
+      allow get, list: if isSignedIn() && belongsToTenant(resource.data.tenantId);
+      allow create: if isSignedIn() && belongsToTenant(request.resource.data.tenantId);
+      allow update: if isSignedIn() && belongsToTenant(resource.data.tenantId) && (isAdmin() || isSuperAdmin());
+      allow delete: if isSuperAdmin();
+    }
   }
 }

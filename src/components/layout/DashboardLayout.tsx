@@ -2,7 +2,7 @@ import { Outlet, Link, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '@/src/contexts/AuthContext';
 import { useTenant } from '@/src/contexts/TenantContext';
 import { Button } from '@/components/ui/button';
-import { Church, LayoutDashboard, Users, MapPin, Calendar, FileText, Settings, LogOut, Shield, ChevronRight, Briefcase, BarChart3, MessageSquare, Layers, CreditCard, ArrowLeftRight } from 'lucide-react';
+import { Church, LayoutDashboard, Users, MapPin, Calendar, FileText, Settings, LogOut, Shield, ChevronRight, Briefcase, BarChart3, MessageSquare, Layers, CreditCard, ArrowLeftRight, Scale, Bell } from 'lucide-react';
 import { auth } from '@/src/lib/firebase';
 import { cn } from '@/lib/utils';
 import NotificationBell from './NotificationBell';
@@ -32,9 +32,12 @@ export function DashboardLayout() {
   const contentItems = [
     { label: 'Services', icon: Calendar, href: '/dashboard/services', roles: ['church-admin', 'pastor', 'super-admin'] },
     { label: 'Finances', icon: FileText, href: '/dashboard/finances', roles: ['church-admin', 'super-admin'] },
+    { label: 'Assessments & Dues', icon: Scale, href: '/dashboard/assessments', roles: ['church-admin', 'pastor', 'super-admin', 'worker'] },
+    { label: 'Event Calendars', icon: Calendar, href: '/dashboard/events', roles: ['church-admin', 'pastor', 'super-admin', 'worker'] },
   ];
 
   const systemItems = [
+    { label: 'Notifications', icon: Bell, href: '/dashboard/notifications', roles: ['church-admin', 'pastor', 'super-admin', 'worker'] },
     { label: 'Settings', icon: Settings, href: '/dashboard/settings', roles: ['church-admin', 'pastor', 'super-admin'] },
   ];
 
@@ -243,6 +246,7 @@ const navItems = [
   { label: 'Services', icon: Calendar, href: '/dashboard/services' },
   { label: 'Finances', icon: FileText, href: '/dashboard/finances' },
   { label: 'Communications', icon: MessageSquare, href: '/dashboard/communications' },
+  { label: 'Notifications', icon: Bell, href: '/dashboard/notifications' },
   { label: 'Settings', icon: Settings, href: '/dashboard/settings' },
   { label: 'Global Panel', icon: Shield, href: '/admin' },
 ];

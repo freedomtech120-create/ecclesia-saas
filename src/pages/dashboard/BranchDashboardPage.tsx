@@ -6,7 +6,7 @@ import { useAuth } from '@/src/contexts/AuthContext';
 import { useTenant } from '@/src/contexts/TenantContext';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Users, Calendar, DollarSign, TrendingUp, MapPin, Search, Plus, ArrowRight, Wallet, ArrowUpRight, ArrowDownRight, History, Share2, Globe, Copy, ExternalLink, CheckCircle2, MessageSquare, Send, Smartphone, ShieldCheck } from 'lucide-react';
+import { Users, Calendar, DollarSign, TrendingUp, MapPin, Search, Plus, ArrowRight, Wallet, ArrowUpRight, ArrowDownRight, History, Share2, Globe, Copy, ExternalLink, CheckCircle2, MessageSquare, Send, Smartphone, ShieldCheck, Sparkles } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -37,6 +37,10 @@ export default function BranchDashboardPage() {
   const [recentResponses, setRecentResponses] = useState<any[]>([]);
   const [smsConfig, setSmsConfig] = useState<any>(null);
   const [smsLogs, setSmsLogs] = useState<any[]>([]);
+  const [assessments, setAssessments] = useState<any[]>([]);
+  const [payments, setPayments] = useState<any[]>([]);
+  const [paymentTransactions, setPaymentTransactions] = useState<any[]>([]);
+  const [refundRequests, setRefundRequests] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [isAddFinanceOpen, setIsAddFinanceOpen] = useState(false);
   const [isAddFormOpen, setIsAddFormOpen] = useState(false);
@@ -67,6 +71,27 @@ export default function BranchDashboardPage() {
     getDocs(query(collection(db, 'branches'), where('tenantId', '==', effectiveTenantId))).then(snap => {
        const branch = snap.docs.find(d => d.id === activeBranchId);
        if (branch) setBranchName(branch.data().name);
+    });
+
+    // Real-time assessments & dues listings
+    const assessQuery = query(collection(db, 'assessments'), where('tenantId', '==', effectiveTenantId));
+    const unsubscribeAssess = onSnapshot(assessQuery, (snap) => {
+      setAssessments(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+    });
+
+    const paymentsQuery = query(collection(db, 'assessment_payments'), where('tenantId', '==', effectiveTenantId));
+    const unsubscribePayments = onSnapshot(paymentsQuery, (snap) => {
+      setPayments(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+    });
+
+    const txQuery = query(collection(db, 'paymentTransactions'), where('tenantId', '==', effectiveTenantId));
+    const unsubscribeTx = onSnapshot(txQuery, (snap) => {
+      setPaymentTransactions(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+    });
+
+    const refundQuery = query(collection(db, 'refund_requests'), where('tenantId', '==', effectiveTenantId));
+    const unsubscribeRefund = onSnapshot(refundQuery, (snap) => {
+      setRefundRequests(snap.docs.map(d => ({ id: d.id, ...d.data() })));
     });
 
     // Real-time finances for this branch
@@ -177,6 +202,10 @@ export default function BranchDashboardPage() {
     const unsubStats = fetchStats();
     return () => {
       unsubscribeFinances();
+      unsubscribeAssess();
+      unsubscribePayments();
+      unsubscribeTx();
+      unsubscribeRefund();
       unsubStats.then(unsub => unsub?.());
     };
   }, [branchId, effectiveTenantId]);
@@ -333,6 +362,37 @@ export default function BranchDashboardPage() {
   }
 
   if (loading) return <div className="p-12 text-center text-slate-400 font-bold uppercase tracking-widest animate-pulse">Syncing Branch Data...</div>;
+
+  // Helpers for Central Dues & Assessments calculations
+  const formatGHS = (amt: number) => `GH₵${(amt || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}`;
+
+  const getAssessmentPaymentsTotal = (aId: string, bId?: string) => {
+    const baseTotal = payments
+      .filter(p => !aId || (p.assessmentId === aId && (!bId || p.branchId === bId) && (p.status === 'approved' || p.status === 'Approved')))
+      .reduce((s, p) => s + (p.amount || 0), 0);
+
+    const txTotal = paymentTransactions
+      .filter(t => !aId || (t.assessmentId === aId && (!bId || t.branchId === bId) && (t.status === 'Approved' || t.status === 'approved')))
+      .reduce((s, t) => s + (t.amount || 0), 0);
+
+    return baseTotal + txTotal;
+  };
+
+  const activeBranchId = branchId || 'main-hq';
+
+  // Calculations for entire central dues
+  const totalDuesGoal = assessments.reduce((sum, a) => sum + (a.amount || 0), 0);
+  const totalPaidDues = assessments.reduce((sum, a) => sum + getAssessmentPaymentsTotal(a.id, activeBranchId), 0);
+  
+  const totalOutstandingDues = assessments.reduce((sum, a) => {
+    const paid = getAssessmentPaymentsTotal(a.id, activeBranchId);
+    return sum + Math.max(0, (a.amount || 0) - paid);
+  }, 0);
+
+  const branchRefundRequests = refundRequests.filter(r => r.branchId === activeBranchId);
+  const totalRefundPending = branchRefundRequests.filter(r => r.status === 'Pending').reduce((sum, r) => sum + (r.overpaidAmount || 0), 0);
+  const totalRefundApproved = branchRefundRequests.filter(r => r.status === 'Approved').reduce((sum, r) => sum + (r.overpaidAmount || 0), 0);
+  const totalRefundTotal = branchRefundRequests.reduce((sum, r) => sum + (r.overpaidAmount || 0), 0);
 
   return (
     <div className="space-y-8">
@@ -500,6 +560,56 @@ export default function BranchDashboardPage() {
            </CardContent>
         </Card>
       </div>
+
+      {/* Central Assessments & Dues summary banner */}
+      <Card className="border-slate-200 overflow-hidden bg-white shadow-sm mb-8">
+        <CardHeader className="bg-purple-50/10 border-b border-purple-100/30 py-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div>
+            <CardTitle className="text-sm font-black uppercase text-slate-805 flex items-center gap-2">
+              <Sparkles className="w-4 h-4 text-purple-600 animate-pulse" />
+              Central Assessments & National Dues Hub
+            </CardTitle>
+            <CardDescription className="text-xs">
+              Real-time monitoring of campus-assigned expected central levies, cleared payments, outstanding arrears, and refund claims.
+            </CardDescription>
+          </div>
+          <Link to="/assessments">
+            <Button variant="outline" className="border-purple-200 text-purple-700 hover:bg-purple-50 hover:text-purple-800 text-[10px] uppercase font-bold h-8 gap-1.5 shrink-0">
+               Open Dues Module <ExternalLink className="w-3.5 h-3.5" />
+            </Button>
+          </Link>
+        </CardHeader>
+        <CardContent className="p-5">
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
+            <div className="space-y-1.5 p-4 bg-slate-50/60 rounded-xl border border-slate-100">
+              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Assigned Dues Goal</span>
+              <span className="text-xl font-black text-slate-900 tracking-tight block font-sans">{formatGHS(totalDuesGoal)}</span>
+              <span className="text-[9px] font-bold text-slate-400 uppercase block">Total Assigned National Levies</span>
+            </div>
+
+            <div className="space-y-1.5 p-4 bg-emerald-50/35 rounded-xl border border-emerald-100/40">
+              <span className="text-[10px] font-bold text-emerald-600 uppercase tracking-wider block">Cleared Payments</span>
+              <span className="text-xl font-black text-emerald-700 tracking-tight block font-sans">{formatGHS(totalPaidDues)}</span>
+              <span className="text-[9px] font-bold text-emerald-600 block">Vetted & Cleared by HQ</span>
+            </div>
+
+            <div className="space-y-1.5 p-4 bg-red-50/35 rounded-xl border border-red-100/40">
+              <span className="text-[10px] font-bold text-red-650 text-red-600 uppercase tracking-wider block">Outstanding Arrears</span>
+              <span className="text-xl font-black text-red-700 tracking-tight block font-sans">{formatGHS(totalOutstandingDues)}</span>
+              <span className="text-[9px] font-bold text-red-550 block">Remaining Arrears Balanced</span>
+            </div>
+
+            <div className="space-y-1.5 p-4 bg-purple-50/45 rounded-xl border border-purple-100/40">
+              <span className="text-[10px] font-bold text-purple-600 uppercase tracking-wider block">Refund Claims Center</span>
+              <span className="text-xl font-black text-purple-800 tracking-tight block font-sans">{formatGHS(totalRefundTotal)}</span>
+              <div className="flex gap-2 text-[9px] font-black uppercase mt-1">
+                <span className="text-amber-600">Pending: {formatGHS(totalRefundPending)}</span>
+                <span className="text-emerald-750 font-extrabold">Approved: {formatGHS(totalRefundApproved)}</span>
+              </div>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
 
       <Tabs defaultValue="overview" className="w-full">
         <TabsList className="bg-slate-100 p-1 rounded-xl mb-6">
