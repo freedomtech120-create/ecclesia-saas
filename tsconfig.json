@@ -16,6 +16,11 @@
     "noEmit": true,
     "skipLibCheck": true,
     "experimentalDecorators": true,
-    "useDefineForClassFields": false
-  }
+    "useDefineForClassFields": false,
+    "strict": true,
+    "esModuleInterop": true,
+    "forceConsistentCasingInFileNames": true
+  },
+  "include": ["src", "server.ts", "vite.config.ts"],
+  "exclude": ["node_modules", "dist"]
 }
