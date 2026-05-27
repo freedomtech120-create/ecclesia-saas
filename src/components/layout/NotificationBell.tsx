@@ -23,16 +23,21 @@ export default function NotificationBell() {
   useEffect(() => {
     if (!effectiveTenantId) return;
 
-    // Filter notifications for active tenant
+    // Filter notifications for active tenant without orderBy to avoid needing composite indexes
     let q = query(
       collection(db, 'notifications'),
-      where('tenantId', '==', effectiveTenantId),
-      orderBy('createdAt', 'desc'),
-      limit(25)
+      where('tenantId', '==', effectiveTenantId)
     );
 
     const unsubscribe = onSnapshot(q, (snapshot) => {
       let data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      
+      // Sort client side as composite indexes may take time to deploy
+      data.sort((a: any, b: any) => {
+        const dateA = a.createdAt?.toDate ? a.createdAt.toDate() : (a.createdAt ? new Date(a.createdAt) : new Date(0));
+        const dateB = b.createdAt?.toDate ? b.createdAt.toDate() : (b.createdAt ? new Date(b.createdAt) : new Date(0));
+        return dateB.getTime() - dateA.getTime();
+      });
       
       // Filter logically based on branch pastor scope if needed
       if (userRole === 'pastor' && assignedBranchId && assignedBranchId !== 'none') {
@@ -41,6 +46,11 @@ export default function NotificationBell() {
         );
       } else if (userRole === 'worker') {
         data = data.filter((n: any) => n.userId === profile?.uid);
+      }
+
+      // Limit to 25 client-side
+      if (data.length > 25) {
+        data = data.slice(0, 25);
       }
 
       setNotifications(data);

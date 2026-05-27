@@ -9,27 +9,32 @@ service cloud.firestore {
     // --- Helpers ---
     function isSignedIn() { return request.auth != null; }
     
+    function hasUserData() {
+      return isSignedIn() && exists(/databases/$(database)/documents/users/$(request.auth.uid));
+    }
+    
     // Cached function for user data
     function getUserData() { 
       return get(/databases/$(database)/documents/users/$(request.auth.uid)).data; 
     }
     
-    function getRole() { return getUserData().role; }
-    function getTenantId() { return getUserData().tenantId; }
-    
     function isSuperAdmin() { 
-      return isSignedIn() && (getRole() == 'super-admin' || request.auth.token.email == 'freedomtech120@gmail.com'); 
+      return isSignedIn() && (request.auth.token.email == 'freedomtech120@gmail.com' || (hasUserData() && getUserData().get('role', 'guest') == 'super-admin')); 
     }
-    function isPastor() { return isSignedIn() && getRole() == 'pastor'; }
-    function isAdmin() { return isSignedIn() && (getRole() in ['church-admin', 'super-admin']); }
+    function isPastor() { 
+      return isSignedIn() && (hasUserData() && getUserData().get('role', 'guest') == 'pastor'); 
+    }
+    function isAdmin() { 
+      return isSignedIn() && (isSuperAdmin() || (hasUserData() && getUserData().get('role', 'guest') in ['church-admin', 'super-admin'])); 
+    }
     
     function belongsToTenant(tenantId) { 
-      return isSignedIn() && (getTenantId() == tenantId || isSuperAdmin()); 
+      return isSignedIn() && (isSuperAdmin() || (hasUserData() && getUserData().get('tenantId', '') == tenantId)); 
     }
 
     // --- Validation Helpers ---
     function isValidGroup(data) {
-      return (data.tenantId == getTenantId()) &&
+      return hasUserData() && (data.tenantId == getUserData().get('tenantId', '')) &&
              (!data.keys().hasAny(['name']) || (data.name is string && data.name.size() <= 100));
     }
 
@@ -51,7 +56,7 @@ service cloud.firestore {
     match /tenants/{tenantId} {
       allow get: if true; // Public church profile
       allow list: if isSuperAdmin();
-      allow create: if isSuperAdmin();
+      allow create: if isSignedIn();
       allow update: if isAdmin() && belongsToTenant(tenantId);
     }
 

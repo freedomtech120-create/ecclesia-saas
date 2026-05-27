@@ -117,6 +117,79 @@ export default function CommunicationsPage() {
     customHeadersJson: '{\n  "Content-Type": "application/json"\n}',
   });
 
+  // Arkesel API v2 Connectivity Tester variables
+  const [isTestModalOpen, setIsTestModalOpen] = useState(false);
+  const [testSelectedConfig, setTestSelectedConfig] = useState<any>(null);
+  const [testRecipient, setTestRecipient] = useState("");
+  const [testSenderId, setTestSenderId] = useState("");
+  const [testMessage, setTestMessage] = useState("");
+  const [testRunning, setTestRunning] = useState(false);
+  const [testLogs, setTestLogs] = useState<any[]>([]);
+  const [testDiagnosis, setTestDiagnosis] = useState("");
+  const [testSuccess, setTestSuccess] = useState<boolean | null>(null);
+
+  const handleOpenTestModal = (config: any) => {
+    setTestSelectedConfig(config);
+    setTestSenderId(config.senderId || "");
+    setTestRecipient("");
+    setTestMessage(`ECCLESIA Connection Test Alert: [${new Date().toLocaleTimeString("en-GB")}]`);
+    setTestLogs([]);
+    setTestDiagnosis("");
+    setTestSuccess(null);
+    setIsTestModalOpen(true);
+  };
+
+  const handleRunConnectivityTest = async () => {
+    if (!testSelectedConfig) return;
+    if (!testRecipient) {
+      toast.error("Please enter a test recipient phone number.");
+      return;
+    }
+
+    setTestRunning(true);
+    setTestLogs([]);
+    setTestDiagnosis("");
+    setTestSuccess(null);
+
+    try {
+      const response = await fetch("/api/sms/test-connectivity", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          apiKey: testSelectedConfig.apiKey,
+          senderId: testSenderId,
+          recipient: testRecipient,
+          message: testMessage
+        })
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status} test failed`);
+      }
+
+      const data = await response.json();
+      setTestLogs(data.logs || []);
+      setTestDiagnosis(data.diagnosis || "");
+      setTestSuccess(data.success);
+      if (data.success) {
+        toast.success("Diagnostics call completed successfully!");
+      } else {
+        toast.error("Diagnostics check finished with routing warnings.");
+      }
+    } catch (err: any) {
+      toast.error("Failed to run connectivity diagnostic: " + err.message);
+      setTestLogs(() => [
+        { step: "Fatal Client Fetch Error", status: "error", message: err.message }
+      ]);
+      setTestDiagnosis("A networking or client error occurred while invoking the connectivity dashboard side-server: " + err.message);
+      setTestSuccess(false);
+    } finally {
+      setTestRunning(false);
+    }
+  };
+
   const seasonalTemplates = [
     {
       name: "Easter Celebration",
@@ -1149,7 +1222,7 @@ export default function CommunicationsPage() {
                     {configForm.provider === "arkasel" && (
                       <>
                         <div className="space-y-1.5">
-                          <Label className="text-[10px] uppercase font-bold text-slate-500">Arkasel API v2 token (Key)</Label>
+                          <Label className="text-[10px] uppercase font-bold text-slate-500">Arkesel API v2 token (Key)</Label>
                           <Input
                             type="password"
                             placeholder="e.g. ark_token_..."
@@ -1168,7 +1241,27 @@ export default function CommunicationsPage() {
                             onChange={(e) => setConfigForm({ ...configForm, senderId: e.target.value })}
                             required
                           />
-                          <p className="text-[9px] text-zinc-400 font-medium text-amber-600">Ensure this fits Arkasel sender limitations.</p>
+                          <p className="text-[9px] text-amber-600 font-medium">This must be registered and approved on Arkesel.</p>
+                        </div>
+
+                        <div className="p-3 bg-amber-50/70 border border-amber-200/60 rounded-lg text-[10px] text-amber-900 space-y-1.5 mt-2">
+                          <p className="font-semibold text-amber-800 flex items-center gap-1.5">
+                            <span>⚠️</span> Credit Deducted but SMS Not Delivered?
+                          </p>
+                          <p className="text-zinc-600 leading-normal">
+                            If Arkesel successfully charges credits but the messages are not received on live devices, please verify the following:
+                          </p>
+                          <ul className="list-disc pl-4 space-y-1 text-zinc-600 leading-normal">
+                            <li>
+                              <strong className="text-zinc-800">Sender ID Whitelisting:</strong> In Ghana, you cannot use any Sender ID until it is registered and explicitly approved on your Arkesel Portal. Releasing messages with unregistered names will deduct credit at submission but fail at the carrier level.
+                            </li>
+                            <li>
+                              <strong className="text-zinc-800">Do-Not-Disturb (DND):</strong> If a recipient phone number has DND configuration active (common on MTN and Telecel), the carriers reject delivery. You will still be charged for the routing resources.
+                            </li>
+                            <li>
+                              <strong className="text-zinc-800">KYC Status:</strong> Telecommunications regulations require a fully validated and approved Arkesel customer identity profile before routing live traffic.
+                            </li>
+                          </ul>
                         </div>
                       </>
                     )}
@@ -1348,6 +1441,18 @@ export default function CommunicationsPage() {
                             >
                               <Trash2 className="w-3.5 h-3.5" />
                             </Button>
+                            {(c.provider === "arkasel" || c.provider === "arkesel") && (
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => handleOpenTestModal(c)}
+                                className="h-7 px-2 text-[10px] text-indigo-600 hover:text-indigo-800 font-bold hover:bg-indigo-50/50 flex items-center gap-1 rounded"
+                                title="Run manual connectivity and delivery tracer diagnostics for Arkesel"
+                              >
+                                <Smartphone className="w-3.5 h-3.5 text-indigo-600 animate-pulse" /> Test API Connection
+                              </Button>
+                            )}
                           </div>
 
                           {isLinkedToMe ? (
@@ -1409,6 +1514,165 @@ export default function CommunicationsPage() {
           </div>
         </div>
       </div>
+
+      {/* Arkesel Connectivity Diagnostic Modal */}
+      <Dialog open={isTestModalOpen} onOpenChange={setIsTestModalOpen}>
+        <DialogContent className="max-w-2xl bg-white rounded-2xl shadow-xl overflow-hidden border border-slate-100 p-0">
+          <DialogHeader className="bg-slate-50 border-b border-zinc-100 px-6 py-4">
+            <DialogTitle className="text-sm font-black uppercase text-indigo-950 flex items-center gap-2">
+              <Smartphone className="w-4 h-4 text-indigo-600" />
+              Arkesel v2 API Diagnostics Suite
+            </DialogTitle>
+            <DialogDescription className="text-xs">
+              Manually test endpoint routing, format validation, and trace cellular carrier response logs for <strong>{testSelectedConfig?.name}</strong>.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="p-6 space-y-5 max-h-[70vh] overflow-y-auto">
+            {/* Parameters Overview */}
+            <div className="grid grid-cols-2 gap-4 p-3.5 bg-slate-50 border border-slate-100/90 rounded-xl text-xs">
+              <div>
+                <span className="block text-[10px] uppercase font-black tracking-wider text-slate-400 mb-0.5">Integration Token (v2 Key)</span>
+                <code className="text-[11px] font-mono text-indigo-800">
+                  {testSelectedConfig?.apiKey ? (
+                    testSelectedConfig.apiKey.length > 8 
+                      ? `${testSelectedConfig.apiKey.substring(0, 4)}......${testSelectedConfig.apiKey.substring(testSelectedConfig.apiKey.length - 4)}` 
+                      : "****"
+                  ) : "Missing"}
+                </code>
+              </div>
+              <div>
+                <span className="block text-[10px] uppercase font-black tracking-wider text-slate-400 mb-0.5">Target Provider</span>
+                <span className="font-semibold uppercase text-slate-700 font-mono text-[11px]">{testSelectedConfig?.provider}</span>
+              </div>
+            </div>
+
+            {/* Test Arguments Input form */}
+            <div className="space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-1.5">
+                  <Label className="text-[10px] uppercase font-black text-slate-650">Approved Sender ID (Ghana Carriers)</Label>
+                  <Input
+                    placeholder="e.g. ECCLESIA"
+                    maxLength={11}
+                    value={testSenderId}
+                    onChange={(e) => setTestSenderId(e.target.value)}
+                  />
+                  <p className="text-[10px] text-zinc-400 leading-normal">
+                    Must match an approved, whitelisted Sender ID on your Arkesel dashboard. letters/numbers only, max 11 chars.
+                  </p>
+                </div>
+
+                <div className="space-y-1.5">
+                  <Label className="text-[10px] uppercase font-black text-slate-655">Test Recipient Phone #</Label>
+                  <Input
+                    placeholder="e.g. 0241234567 or 233241234567"
+                    value={testRecipient}
+                    onChange={(e) => setTestRecipient(e.target.value)}
+                    required
+                  />
+                  <p className="text-[10px] text-zinc-400 leading-normal">
+                    Enter the phone number of a test device to receive the connectivity diagnostic SMS.
+                  </p>
+                </div>
+              </div>
+
+              <div className="space-y-1.5">
+                <Label className="text-[10px] uppercase font-black text-slate-655">Test Message Payload</Label>
+                <textarea
+                  className="w-full text-xs p-3 border rounded-xl font-mono focus:ring-1 focus:ring-indigo-500 focus:outline-none"
+                  rows={2}
+                  maxLength={160}
+                  value={testMessage}
+                  onChange={(e) => setTestMessage(e.target.value)}
+                  placeholder="Type a custom query text..."
+                />
+                <div className="flex justify-between items-center text-[10px] text-slate-400 font-semibold">
+                  <span>Standard 1-page limits is 160 characters</span>
+                  <span>{testMessage.length}/160</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Execution Trace */}
+            {testLogs.length > 0 && (
+              <div className="space-y-2.5">
+                <Label className="text-[10px] uppercase font-black text-slate-500 flex items-center gap-1.5">
+                  <span className="inline-block w-2 h-2 rounded-full bg-indigo-550 animate-pulse"></span>
+                  Chronological Diagnostic Execution Log
+                </Label>
+                <div className="p-3 bg-zinc-950 rounded-xl font-mono text-[11px] text-zinc-300 space-y-2 border border-zinc-900 max-h-[160px] overflow-y-auto">
+                  {testLogs.map((log, idx) => {
+                    const statusColors = {
+                      info: "text-blue-400",
+                      success: "text-emerald-400 font-semibold",
+                      warning: "text-amber-400 font-semibold",
+                      error: "text-rose-400 font-bold"
+                    }[log.status as "info" | "success" | "warning" | "error"] || "text-zinc-400";
+
+                    const icon = {
+                      info: "ℹ️",
+                      success: "✅",
+                      warning: "⚠️",
+                      error: "❌"
+                    }[log.status as "info" | "success" | "warning" | "error"] || "•";
+
+                    return (
+                      <div key={idx} className="leading-snug">
+                        <span className="text-zinc-500">[{idx+1}]</span>{" "}
+                        <span className={statusColors}>{icon} {log.step}:</span>{" "}
+                        <span className="text-zinc-200">{log.message}</span>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            {/* AI Diagnosis Summary */}
+            {testDiagnosis && (
+              <div className={cn(
+                "p-4 border rounded-xl space-y-2 text-left",
+                testSuccess 
+                  ? "bg-emerald-50/20 border-emerald-200/50 text-emerald-950" 
+                  : "bg-amber-50/20 border-amber-200/50 text-amber-950"
+              )}>
+                <h4 className="text-xs font-black uppercase tracking-tight flex items-center gap-1.5">
+                  {testSuccess ? (
+                    <span className="px-1.5 py-0.5 bg-emerald-100 text-emerald-800 rounded font-bold">INFO PASSED</span>
+                  ) : (
+                    <span className="px-1.5 py-0.5 bg-rose-100 text-rose-800 rounded font-bold">DIAGNOSTICS TRIGGERED</span>
+                  )}
+                  Diagnostic Findings Summary
+                </h4>
+                <div className="text-[11px] leading-relaxed whitespace-pre-line text-slate-700 font-medium">
+                  {testDiagnosis}
+                </div>
+              </div>
+            )}
+          </div>
+
+          <DialogFooter className="bg-slate-50 border-t border-zinc-100 px-6 py-4 flex items-center justify-between sm:justify-between">
+            <Button
+              type="button"
+              variant="outline"
+              disabled={testRunning}
+              onClick={() => setIsTestModalOpen(false)}
+              className="px-4 text-xs font-semibold hover:bg-white border-slate-200"
+            >
+              Close Diagnostic Suite
+            </Button>
+            <Button
+              type="button"
+              disabled={testRunning}
+              onClick={handleRunConnectivityTest}
+              className="bg-indigo-600 hover:bg-zinc-900 text-white px-5 text-xs font-bold uppercase tracking-wider h-10 shrink-0"
+            >
+              {testRunning ? "Spawning Trace..." : "Run Connectivity Diagnostic"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

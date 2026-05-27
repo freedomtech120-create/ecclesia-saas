@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { User, onAuthStateChanged } from 'firebase/auth';
-import { doc, getDoc, collection, query, where, getDocs, setDoc, serverTimestamp } from 'firebase/firestore';
+import { doc, getDoc, collection, query, where, getDocs, setDoc, serverTimestamp, onSnapshot } from 'firebase/firestore';
 import { auth, db } from '../lib/firebase';
 import { UserProfile } from '../types';
 
@@ -28,86 +28,120 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
+    let unsubscribeProfile: (() => void) | null = null;
+
+    const unsubscribeAuth = onAuthStateChanged(auth, async (firebaseUser) => {
       setUser(firebaseUser);
       
+      if (unsubscribeProfile) {
+        unsubscribeProfile();
+        unsubscribeProfile = null;
+      }
+
       if (firebaseUser) {
-        // Fetch user profile from Firestore
-        let profileData: any = null;
-        let profileDoc = await getDoc(doc(db, 'users', firebaseUser.uid));
+        setLoading(true);
+        const userDocRef = doc(db, 'users', firebaseUser.uid);
         
-        if (profileDoc.exists()) {
-          profileData = profileDoc.data();
-        }
-
-        // AUTO-PROMOTE OWNER TO SUPER-ADMIN
-        if (firebaseUser.email === 'freedomtech120@gmail.com' && profileData?.role !== 'super-admin') {
-           const ownerProfile = {
-             ...(profileData || {}),
-             uid: firebaseUser.uid,
-             email: firebaseUser.email,
-             displayName: firebaseUser.displayName || 'App Owner',
-             role: 'super-admin',
-             tenantId: 'platform',
-             status: 'active',
-             updatedAt: serverTimestamp()
-           };
-           
-           if (!profileData) {
-             ownerProfile.createdAt = serverTimestamp();
-           }
-
-           try {
-             await setDoc(doc(db, 'users', firebaseUser.uid), ownerProfile, { merge: true });
-             profileData = ownerProfile;
-           } catch (e) {
-             console.error("Error promoting owner to super-admin:", e);
-           }
-        }
-
-        // Also check if this user is a staff member by email
-        if (firebaseUser.email) {
-          const staffQuery = query(collection(db, 'staff'), where('email', '==', firebaseUser.email));
-          const staffSnap = await getDocs(staffQuery);
+        unsubscribeProfile = onSnapshot(userDocRef, async (profileDoc) => {
+          let profileData: any = null;
+          const docExists = profileDoc.exists();
           
-          if (!staffSnap.empty) {
-            const staffDoc = staffSnap.docs[0].data();
-            
-            // Auto-provision users record if missing
-            if (!profileDoc.exists()) {
-              const newProfile = {
-                uid: firebaseUser.uid,
-                email: firebaseUser.email,
-                displayName: firebaseUser.displayName || `${staffDoc.firstName} ${staffDoc.lastName}`,
-                tenantId: staffDoc.tenantId,
-                role: staffDoc.role, // e.g. 'pastor' or 'worker'
-                status: 'active',
-                createdAt: serverTimestamp()
-              };
-              
-              try {
-                await setDoc(doc(db, 'users', firebaseUser.uid), newProfile);
-                profileData = newProfile;
-              } catch (e) {
-                console.error("Error auto-provisioning user profile:", e);
-              }
-            }
-
-            profileData = {
-              ...(profileData || {}),
-              staffData: staffDoc
-            };
+          if (docExists) {
+            profileData = profileDoc.data();
           }
-        }
-        
-        setProfile(profileData);
+
+          // AUTO-PROMOTE OWNER TO SUPER-ADMIN
+          if (firebaseUser.email === 'freedomtech120@gmail.com' && profileData?.role !== 'super-admin') {
+             const ownerProfile = {
+               ...(profileData || {}),
+               uid: firebaseUser.uid,
+               email: firebaseUser.email,
+               displayName: firebaseUser.displayName || 'App Owner',
+               role: 'super-admin',
+               tenantId: 'platform',
+               status: 'active',
+               updatedAt: serverTimestamp()
+             };
+             
+             if (!profileData) {
+               ownerProfile.createdAt = serverTimestamp();
+             }
+
+             try {
+               await setDoc(doc(db, 'users', firebaseUser.uid), ownerProfile, { merge: true });
+               profileData = ownerProfile;
+             } catch (e) {
+               console.error("Error promoting owner to super-admin:", e);
+             }
+          }
+
+          // Also check if this user is a staff member by email
+          if (firebaseUser.email) {
+            try {
+              const staffQuery = query(collection(db, 'staff'), where('email', '==', firebaseUser.email));
+              const staffSnap = await getDocs(staffQuery);
+              
+              if (!staffSnap.empty) {
+                const staffDoc = staffSnap.docs[0].data();
+                
+                // Auto-provision users record if missing
+                if (!docExists) {
+                  const newProfile = {
+                    uid: firebaseUser.uid,
+                    email: firebaseUser.email,
+                    displayName: firebaseUser.displayName || `${staffDoc.firstName} ${staffDoc.lastName}`,
+                    tenantId: staffDoc.tenantId,
+                    role: staffDoc.role, // e.g. 'pastor' or 'worker'
+                    status: 'active',
+                    createdAt: serverTimestamp()
+                  };
+                  
+                  try {
+                    await setDoc(doc(db, 'users', firebaseUser.uid), newProfile);
+                    profileData = newProfile;
+                  } catch (e) {
+                    console.error("Error auto-provisioning user profile:", e);
+                  }
+                }
+
+                profileData = {
+                  ...(profileData || {}),
+                  staffData: staffDoc
+                };
+              }
+            } catch (err) {
+              console.warn("Security policy: staff query skipped or not permitted yet:", err);
+            }
+          }
+          
+          setProfile(profileData);
+          
+          // Wait briefly during registration/signup flow to let document resolve
+          if (!docExists && !profileData) {
+            const timer = setTimeout(() => {
+              setLoading(false);
+            }, 3000);
+            return () => clearTimeout(timer);
+          } else {
+            setLoading(false);
+          }
+        }, (error) => {
+          console.error("Error in profile snapshot:", error);
+          setLoading(false);
+        });
+
       } else {
         setProfile(null);
+        setLoading(false);
       }
-      setLoading(false);
     });
 
-    return unsubscribe;
+    return () => {
+      unsubscribeAuth();
+      if (unsubscribeProfile) {
+        unsubscribeProfile();
+      }
+    };
   }, []);
 
   const value = {

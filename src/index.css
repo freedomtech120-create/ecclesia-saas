@@ -107,11 +107,17 @@
 @layer base {
   * {
     @apply border-border outline-ring/50;
-    }
+  }
+  html, body {
+    overflow-x: hidden;
+    max-width: 100vw;
+    -webkit-overflow-scrolling: touch;
+  }
   body {
     @apply bg-background text-foreground;
-    }
+    padding-bottom: env(safe-area-inset-bottom);
+  }
   html {
     @apply font-sans;
-    }
+  }
 }
