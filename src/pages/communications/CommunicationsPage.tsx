@@ -471,6 +471,24 @@ export default function CommunicationsPage() {
         return;
       }
 
+      // Dispatch the real SMS via local server API proxy to mask API credentials and handle protocols
+      const response = await fetch("/api/sms/send", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          config: smsConfig,
+          recipients: uniqueNumbers,
+          message: smsData.message
+        })
+      });
+
+      if (!response.ok) {
+        const errJson = await response.json().catch(() => ({}));
+        throw new Error(errJson.error || `HTTP ${response.status} sending failed`);
+      }
+
       await addDoc(collection(db, "sms_logs"), {
         tenantId,
         branchId: profile?.staffData?.assignedBranchId || "central",

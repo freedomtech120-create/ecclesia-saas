@@ -105,7 +105,9 @@ service cloud.firestore {
     // 10. Member Attendance Collection
     match /member_attendance/{docId} {
       allow get, list: if isSignedIn() && belongsToTenant(resource.data.tenantId);
-      allow write: if isSignedIn() && belongsToTenant(request.resource.data.tenantId);
+      allow create: if isSignedIn() && belongsToTenant(request.resource.data.tenantId);
+      allow update: if isSignedIn() && belongsToTenant(resource.data.tenantId) && belongsToTenant(request.resource.data.tenantId);
+      allow delete: if isSignedIn() && belongsToTenant(resource.data.tenantId);
     }
 
     // 11. Staff Claims
@@ -130,7 +132,9 @@ service cloud.firestore {
     // 14. SMS Configs
     match /sms_configs/{configId} {
       allow get, list: if isSignedIn() && belongsToTenant(resource.data.tenantId);
-      allow write: if isAdmin() && belongsToTenant(request.resource.data.tenantId);
+      allow create: if (isAdmin() || isPastor()) && belongsToTenant(request.resource.data.tenantId);
+      allow update: if (isAdmin() || isPastor()) && belongsToTenant(resource.data.tenantId) && belongsToTenant(request.resource.data.tenantId);
+      allow delete: if (isAdmin() || isPastor()) && belongsToTenant(resource.data.tenantId);
     }
 
     // 15. SMS Logs
@@ -142,7 +146,9 @@ service cloud.firestore {
     // 16. SMS Templates
     match /sms_templates/{templateId} {
       allow get, list: if isSignedIn() && belongsToTenant(resource.data.tenantId);
-      allow write: if isSignedIn() && belongsToTenant(request.resource.data.tenantId);
+      allow create: if isSignedIn() && belongsToTenant(request.resource.data.tenantId);
+      allow update: if isSignedIn() && belongsToTenant(resource.data.tenantId) && belongsToTenant(request.resource.data.tenantId);
+      allow delete: if isSignedIn() && belongsToTenant(resource.data.tenantId);
     }
 
     // 17. Groups Collection
