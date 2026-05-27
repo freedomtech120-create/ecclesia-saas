@@ -1,5 +1,5 @@
 {
-  "name": "Ecclesia SaaS",
+  "name": "Siasore",
   "description": "A comprehensive multi-tenant Church Management System (SaaS) featuring branch management, member tracking, attendance, finances, and role-based access control. Now with Android app support via Capacitor.",
   "requestFramePermissions": [],
   "majorCapabilities": ["Multi-tenant", "Role-based Access", "Android App Support"]

@@ -89,7 +89,7 @@ export function DashboardLayout() {
             <Church className="w-6 h-6" />
           </div>
           <div className="flex flex-col">
-            <span className="font-bold text-lg tracking-tight text-slate-900">Ecclesia</span>
+            <span className="font-bold text-lg tracking-tight text-slate-900">Siasore</span>
             <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider -mt-1">Cloud SaaS</span>
           </div>
         </div>

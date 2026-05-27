@@ -13,7 +13,7 @@ export default function LandingPage() {
           <div className="w-9 h-9 bg-indigo-600 rounded-xl flex items-center justify-center text-white font-bold shadow-lg shadow-indigo-100">
             <Church className="w-5 h-5" />
           </div>
-          <span className="font-black text-xl tracking-tighter text-slate-900">ECCLESIA</span>
+          <span className="font-black text-xl tracking-tighter text-slate-900">SIASORE</span>
         </div>
         <div className="hidden md:flex items-center gap-8">
           <a href="#features" className="text-sm font-bold text-slate-500 hover:text-indigo-600 transition-colors">Features</a>

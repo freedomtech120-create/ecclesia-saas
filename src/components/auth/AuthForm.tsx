@@ -136,7 +136,7 @@ export function AuthForm() {
           </div>
         </div>
         <div>
-          <CardTitle className="text-2xl font-bold tracking-tight">Welcome to Ecclesia</CardTitle>
+          <CardTitle className="text-2xl font-bold tracking-tight">Welcome to Siasore</CardTitle>
           <CardDescription>Manage your church with ease and excellence.</CardDescription>
         </div>
       </CardHeader>

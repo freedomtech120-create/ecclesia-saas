@@ -45,7 +45,7 @@ const LoginPage = () => (
     <div className="relative w-full max-w-md">
       <AuthForm />
       <p className="text-center mt-8 text-xs text-slate-400 font-medium tracking-wide uppercase">
-        Protected by Ecclesia Advanced Security
+        Protected by Siasore Advanced Security
       </p>
     </div>
   </div>
