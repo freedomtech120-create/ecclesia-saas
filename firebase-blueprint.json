@@ -41,7 +41,10 @@
         "role": { "type": "string", "enum": ["super-admin", "church-admin", "pastor", "worker", "member"] },
         "displayName": { "type": "string" },
         "email": { "type": "string" },
-        "branchIds": { "type": "array", "description": "Branches this user is associated with" }
+        "branchIds": { "type": "array", "description": "Branches this user is associated with" },
+        "smsBalance": { "type": "number", "description": "Current SMS credits balance in the system" },
+        "smsBalanceThreshold": { "type": "number", "description": "User configurable threshold for low credit alerts" },
+        "notifiedLowBalance": { "type": "boolean", "description": "State flag tracking if the user has been notified of low credits" }
       },
       "required": ["uid", "email", "role"]
     },
@@ -572,6 +575,26 @@
     "refund_requests": {
       "schema": "RefundRequest",
       "description": "Refund requests submitted by branches and evaluated by HQ Treasury admins."
+    },
+    "gateway_settings": {
+      "schema": "GatewaySettings",
+      "description": "App-wide central gateway configuration managed only by Super Admin."
+    },
+    "sms_packages": {
+      "schema": "SMSPackage",
+      "description": "SMS credit packages created by the platform admin for resale."
+    },
+    "sms_transactions": {
+      "schema": "SMSTransaction",
+      "description": "Log of outgoing SMS broadcasts routed through the reseller system."
+    },
+    "wallet_transactions": {
+      "schema": "WalletTransaction",
+      "description": "List of credit purchases and top-ups done by users/tenants."
+    },
+    "delivery_reports": {
+      "schema": "DeliveryReport",
+      "description": "Recipient-level standard status flags for SMS deliveries."
     }
   }
 }

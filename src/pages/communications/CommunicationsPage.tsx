@@ -1,1678 +1,1042 @@
 import React, { useState, useEffect } from "react";
-import {
-  collection,
-  query,
-  where,
-  getDocs,
-  onSnapshot,
-  orderBy,
-  limit,
-  addDoc,
-  serverTimestamp,
-  updateDoc,
-  doc,
-} from "firebase/firestore";
+import { collection, query, where, getDocs, onSnapshot, orderBy, limit, doc, addDoc, updateDoc, serverTimestamp } from "firebase/firestore";
 import { db } from "@/src/lib/firebase";
 import { useAuth } from "@/src/contexts/AuthContext";
 import { useTenant } from "@/src/contexts/TenantContext";
-import {
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-  CardDescription,
-} from "@/components/ui/card";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import {
-  MessageSquare,
-  Send,
-  Smartphone,
-  ShieldCheck,
-  TrendingUp,
-  Users,
-  Target,
-  History,
-  CalendarDays,
-  Sparkles,
-  PlusCircle,
-  Trash2,
-  Edit3,
-  Link2,
-  Unlink,
-  Plus,
-  CheckCircle2,
-} from "lucide-react";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from "@/components/ui/dialog";
+import { Textarea } from "@/components/ui/textarea";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { toast } from "sonner";
-import { format } from "date-fns";
 import { cn } from "@/lib/utils";
+import { usePaystackPayment } from 'react-paystack';
+import { 
+  MessageSquare, Send, Smartphone, TrendingUp, Users, History, Sparkles, 
+  Trash2, CheckCircle2, Coins, CreditCard, ShoppingCart, Search, 
+  ChevronRight, AlertCircle, RefreshCw, FileText, Download, ShieldCheck
+} from "lucide-react";
 
 export default function CommunicationsPage() {
-  const { profile } = useAuth();
+  const { profile, user } = useAuth();
   const { effectiveTenantId } = useTenant();
-  const [smsConfig, setSmsConfig] = useState<any>(null);
-  const [smsLogs, setSmsLogs] = useState<any[]>([]);
-  const [customTemplates, setCustomTemplates] = useState<any[]>([]);
-  const [stats, setStats] = useState({
-    totalMembers: 0,
-    totalMessages: 0,
-    activeBranches: 0,
-  });
-  const [loading, setLoading] = useState(true);
-  const [smsLoading, setSmsLoading] = useState(false);
-  const [isTemplateModalOpen, setIsTemplateModalOpen] = useState(false);
-  const [newTemplate, setNewTemplate] = useState({
-    name: "",
-    content: "",
-    category: "custom",
-  });
-  const [smsData, setSmsData] = useState({
-    message: "",
-    recipientType:
-      profile?.role === "pastor" ? "branch-members" : "global-members",
-    targetBranchId:
-      profile?.role === "pastor"
-        ? profile?.staffData?.assignedBranchId || "all"
-        : "all",
-  });
 
-  const [smsConfigsList, setSmsConfigsList] = useState<any[]>([]);
-  const [isConfigModalOpen, setIsConfigModalOpen] = useState(false);
-  const [editingConfigId, setEditingConfigId] = useState<string | null>(null);
-  const [configForm, setConfigForm] = useState({
-    name: "",
-    provider: "twilio",
-    apiKey: "",
-    apiSecret: "",
-    senderId: "",
-    customUrl: "",
-    customMethod: "POST",
-    customBodyJson: '{\n  "recipient": "{{to}}",\n  "message": "{{message}}",\n  "sender": "{{sender}}"\n}',
-    customHeadersJson: '{\n  "Content-Type": "application/json"\n}',
-  });
+  // Navigation state
+  const [activeTab, setActiveTab] = useState<'send' | 'buy' | 'logs' | 'reports' | 'templates'>('send');
 
-  // Arkesel API v2 Connectivity Tester variables
-  const [isTestModalOpen, setIsTestModalOpen] = useState(false);
-  const [testSelectedConfig, setTestSelectedConfig] = useState<any>(null);
-  const [testRecipient, setTestRecipient] = useState("");
-  const [testSenderId, setTestSenderId] = useState("");
-  const [testMessage, setTestMessage] = useState("");
-  const [testRunning, setTestRunning] = useState(false);
-  const [testLogs, setTestLogs] = useState<any[]>([]);
-  const [testDiagnosis, setTestDiagnosis] = useState("");
-  const [testSuccess, setTestSuccess] = useState<boolean | null>(null);
-
-  const handleOpenTestModal = (config: any) => {
-    setTestSelectedConfig(config);
-    setTestSenderId(config.senderId || "");
-    setTestRecipient("");
-    setTestMessage(`ECCLESIA Connection Test Alert: [${new Date().toLocaleTimeString("en-GB")}]`);
-    setTestLogs([]);
-    setTestDiagnosis("");
-    setTestSuccess(null);
-    setIsTestModalOpen(true);
-  };
-
-  const handleRunConnectivityTest = async () => {
-    if (!testSelectedConfig) return;
-    if (!testRecipient) {
-      toast.error("Please enter a test recipient phone number.");
-      return;
-    }
-
-    setTestRunning(true);
-    setTestLogs([]);
-    setTestDiagnosis("");
-    setTestSuccess(null);
-
-    try {
-      const response = await fetch("/api/sms/test-connectivity", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json"
-        },
-        body: JSON.stringify({
-          apiKey: testSelectedConfig.apiKey,
-          senderId: testSenderId,
-          recipient: testRecipient,
-          message: testMessage
-        })
-      });
-
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status} test failed`);
-      }
-
-      const data = await response.json();
-      setTestLogs(data.logs || []);
-      setTestDiagnosis(data.diagnosis || "");
-      setTestSuccess(data.success);
-      if (data.success) {
-        toast.success("Diagnostics call completed successfully!");
-      } else {
-        toast.error("Diagnostics check finished with routing warnings.");
-      }
-    } catch (err: any) {
-      toast.error("Failed to run connectivity diagnostic: " + err.message);
-      setTestLogs(() => [
-        { step: "Fatal Client Fetch Error", status: "error", message: err.message }
-      ]);
-      setTestDiagnosis("A networking or client error occurred while invoking the connectivity dashboard side-server: " + err.message);
-      setTestSuccess(false);
-    } finally {
-      setTestRunning(false);
-    }
-  };
-
-  const seasonalTemplates = [
-    {
-      name: "Easter Celebration",
-      content:
-        "He is Risen! We invite you to our Easter Sunday service at 9AM. Come celebrate the victory of Christ with us. God bless!",
-      category: "seasonal",
-    },
-    {
-      name: "Christmas Message",
-      content:
-        "Merry Christmas! Join us for our special Carol Service this evening. Wishing you the joy and peace of the season.",
-      category: "seasonal",
-    },
-    {
-      name: "New Year Fast",
-      content:
-        "Welcome to our year of Divine Reset! We start our 21-day fasting tomorrow. Join us online at 6PM daily for prayers.",
-      category: "seasonal",
-    },
-    {
-      name: "Sunday Reminder",
-      content:
-        "Happy Saturday! Just a reminder of our service tomorrow at 8AM. We look forward to worshipping together.",
-      category: "service",
-    },
-    {
-      name: "Tithes & Offerings",
-      content:
-        "Your faithfulness makes our mission possible. You can give your tithes and offerings via our digital channels. God bless your seeds.",
-      category: "finance",
-    },
-  ];
-
+  // Multi-tenant selection helper states
   const [branches, setBranches] = useState<any[]>([]);
-  const [gatewayConfig, setGatewayConfig] = useState({
-    provider: "twilio",
-    apiKey: "",
-    apiSecret: "",
-    senderId: "",
-  });
+  const [totalMembersCount, setTotalMembersCount] = useState(0);
 
-  useEffect(() => {
-    if (!effectiveTenantId) return;
+  // User local wallet and SMS balance
+  const [smsBalance, setSmsBalance] = useState<number>(50); // fallback
+  const [walletBalance, setWalletBalance] = useState<number>(0);
+  const [smsThreshold, setSmsThreshold] = useState<number>(50);
+  const [isUpdatingThreshold, setIsUpdatingThreshold] = useState(false);
 
-    const isPastor = profile?.role === "pastor";
-    const branchId = profile?.staffData?.assignedBranchId || "central";
+  // Buy structures
+  const [packages, setPackages] = useState<any[]>([
+    { id: "starter-tier", name: "Starter Tier", smsCount: 100, price: 10, active: true },
+    { id: "business-growth", name: "Business Growth", smsCount: 500, price: 45, active: true },
+    { id: "premium-enterprise", name: "Premium Enterprise", smsCount: 1000, price: 80, active: true }
+  ]);
+  const [isBuyingPack, setIsBuyingPack] = useState<any>(null);
+  const [paymentProvider, setPaymentProvider] = useState<'paystack' | 'flutterwave' | 'hubtel' | 'momo'>('paystack');
+  const [checkoutPhone, setCheckoutPhone] = useState('');
+  const [isProcessingCheckout, setIsProcessingCheckout] = useState(false);
 
-    // Fetch branches
-    getDocs(
-      query(
-        collection(db, "branches"),
-        where("tenantId", "==", effectiveTenantId),
-      ),
-    ).then((snap) => {
-      const branchList = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
-      setBranches(branchList);
-      setStats((prev) => ({ ...prev, activeBranches: snap.size }));
+  const PaystackSMSButton = ({ pack, disabled }: { pack: any; disabled: boolean }) => {
+    const config = {
+      reference: `ecclesia-paystack-${Date.now()}`,
+      email: user?.email || "billing@ecclesia.com",
+      amount: Math.round(pack.price * 100),
+      currency: "GHS",
+      publicKey: import.meta.env.VITE_PAYSTACK_PUBLIC_KEY || "pk_test_e3fd79bc9dc8c5da84ab6be4149806b7cb0bebfd",
+    };
 
-      if (isPastor && profile?.staffData?.assignedBranchId) {
-        setSmsData((prev) => ({
-          ...prev,
-          targetBranchId: profile.staffData.assignedBranchId,
-        }));
-      }
-    });
-
-    // Fetch total members
-    let membersQuery = query(
-      collection(db, "members"),
-      where("tenantId", "==", effectiveTenantId),
-    );
-    if (
-      isPastor &&
-      profile?.staffData?.assignedBranchId &&
-      profile.staffData.assignedBranchId !== "none"
-    ) {
-      membersQuery = query(
-        membersQuery,
-        where("branchId", "==", profile.staffData.assignedBranchId),
-      );
+    let initializePayment: any;
+    try {
+      initializePayment = usePaystackPayment(config);
+    } catch (e) {
+      console.warn("Paystack hook initializer error:", e);
     }
-    getDocs(membersQuery).then((snap) => {
-      setStats((prev) => ({ ...prev, totalMembers: snap.size }));
-    });
 
-    // Fetch custom templates
-    const qTemplates = query(
-      collection(db, "sms_templates"),
-      where("tenantId", "==", effectiveTenantId),
-      orderBy("createdAt", "desc"),
-    );
-    const unsubscribeTemplates = onSnapshot(
-      qTemplates,
-      (snap) => {
-        setCustomTemplates(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
-      },
-      (error) => {
-        console.error("SMS Templates onSnapshot error:", error);
-      },
-    );
+    const handleCreateTransaction = async (refStr: string) => {
+      setIsProcessingCheckout(true);
+      try {
+        toast.info("Paystack authorization received. Completing credit top-up...");
+        const verifyResponse = await fetch("/api/payment/verify", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            userId: user?.uid,
+            packageId: pack.id,
+            paymentProvider: "PAYSTACK",
+            reference: refStr
+          })
+        });
 
-    // Fetch SMS config (real-time stream of all configs, auto-identifying the linked one)
-    const qSmsAll = query(
-      collection(db, "sms_configs"),
-      where("tenantId", "==", effectiveTenantId),
-    );
-    const unsubscribeAllSms = onSnapshot(qSmsAll, (snap) => {
-      const allConfigs = snap.docs.map((d) => ({ id: d.id, ...d.data() }) as any);
-      setSmsConfigsList(allConfigs);
+        const body = await verifyResponse.json();
+        if (!verifyResponse.ok) {
+          throw new Error(body.error || "Verification issue");
+        }
 
-      const activeLink = isPastor ? branchId : "central";
-      const linked = allConfigs.find((c) => c.branchId === activeLink);
+        toast.success(`Refill Approved! Added ${pack.smsCount} credits successfully.`);
+        setIsBuyingPack(null);
+      } catch (err: any) {
+        toast.error("Internal verification error: " + err.message);
+      } finally {
+        setIsProcessingCheckout(false);
+      }
+    };
 
-      if (linked) {
-        setSmsConfig(linked);
-        setGatewayConfig({
-          provider: linked.provider || "twilio",
-          apiKey: linked.apiKey || "",
-          apiSecret: linked.apiSecret || "",
-          senderId: linked.senderId || "",
+    const handleSimulatedPayment = () => {
+      const simulatedRef = 'SIM-' + Math.floor(10000000 + Math.random() * 90000000);
+      toast.loading("Processing secure simulated payment...", { id: "sim-pay" });
+      setTimeout(async () => {
+        toast.dismiss("sim-pay");
+        await handleCreateTransaction(simulatedRef);
+      }, 1200);
+    };
+
+    const handleRealPayment = () => {
+      if (!import.meta.env.VITE_PAYSTACK_PUBLIC_KEY || import.meta.env.VITE_PAYSTACK_PUBLIC_KEY.includes('xxxx')) {
+        toast.info("Paystack Public Key not configured. Launching instant checkout simulation...");
+        handleSimulatedPayment();
+        return;
+      }
+      if (initializePayment) {
+        initializePayment({
+          onSuccess: (ref: any) => handleCreateTransaction(ref.reference),
+          onClose: () => toast.info('Payment window closed')
         });
       } else {
-        setSmsConfig(null);
+        handleSimulatedPayment();
+      }
+    };
+
+    return (
+      <Button 
+        type="button" 
+        onClick={handleRealPayment} 
+        disabled={disabled}
+        className="bg-indigo-600 hover:bg-indigo-700 font-bold uppercase tracking-wider text-xs h-9"
+      >
+        Pay GHC with Paystack
+      </Button>
+    );
+  };
+
+  // SMS writer desk state
+  const [message, setMessage] = useState("");
+  const [recipientType, setRecipientType] = useState<'global' | 'branch' | 'custom'>('custom');
+  const [targetBranchId, setTargetBranchId] = useState<string>("all");
+  const [customNumbers, setCustomNumbers] = useState("");
+  const [isSending, setIsSending] = useState(false);
+
+  // Logging and auditing lists
+  const [smsLogs, setSmsLogs] = useState<any[]>([]);
+  const [deliveryReports, setDeliveryReports] = useState<any[]>([]);
+  const [searchQuery, setSearchQuery] = useState("");
+
+  // Templates list
+  const [templates, setTemplates] = useState<any[]>([
+    { id: '1', name: "Sunday Revival Service", content: "Dear members, please join us tomorrow at 8:30 AM for our Sunday Revival service filled with glory and powerful prayers. God bless!", category: "Service" },
+    { id: '2', name: "Midweek Spiritual Battle", content: "Midweek prayer and bible studies starts tonight at 6:30 PM. Don't miss this fellowship session to lift your spirit.", category: "Service" },
+    { id: '3', name: "Tithe & Fruit Seed Reminder", content: "Your support sustains the church's outreach ministry. Send your tithes and seeds using Momo paycode 989212. Blessings!", category: "Finance" }
+  ]);
+
+  // Read live statistics and balances
+  useEffect(() => {
+    if (!effectiveTenantId || !user?.uid) return;
+
+    // Stream user profile values (smsBalance)
+    const unsubscribeUser = onSnapshot(doc(db, "users", user.uid), (snap) => {
+      if (snap.exists()) {
+        const data = snap.data();
+        setSmsBalance(typeof data.smsBalance === 'number' ? data.smsBalance : 50);
+        setWalletBalance(typeof data.walletBalance === 'number' ? data.walletBalance : 0);
+        setSmsThreshold(typeof data.smsBalanceThreshold === 'number' ? data.smsBalanceThreshold : 50);
       }
     });
 
-    // Fetch SMS logs
-    let logsQuery = query(
-      collection(db, "sms_logs"),
-      where("tenantId", "==", effectiveTenantId),
-      orderBy("sentAt", "desc"),
-      limit(20),
-    );
-    if (
-      isPastor &&
-      profile?.staffData?.assignedBranchId &&
-      profile.staffData.assignedBranchId !== "none"
-    ) {
-      logsQuery = query(
-        logsQuery,
-        where("branchId", "==", profile.staffData.assignedBranchId),
-      );
-    }
-    const unsubscribeLogs = onSnapshot(
-      logsQuery,
+    // Load available credit packages
+    const unsubscribePackages = onSnapshot(
+      query(collection(db, "sms_packages"), where("active", "==", true)),
       (snap) => {
-        const logs = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
-        setSmsLogs(logs);
-        setStats((prev) => ({ ...prev, totalMessages: logs.length })); // Just an estimate for now
-        setLoading(false);
-      },
-      (error) => {
-        console.error("SMS Logs onSnapshot error:", error);
-        setLoading(false);
-      },
+        if (!snap.empty) {
+          const pkgs = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+          setPackages(pkgs);
+        }
+      }
     );
+
+    // Load outgoing transactional history
+    const qLogs = query(
+      collection(db, "sms_transactions"), 
+      where("userId", "==", user.uid),
+      orderBy("createdAt", "desc"),
+      limit(40)
+    );
+    const unsubscribeLogs = onSnapshot(qLogs, (snap) => {
+      const logs = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      setSmsLogs(logs);
+    });
+
+    // Load delivery logs
+    const qReports = query(
+      collection(db, "delivery_reports"),
+      where("userId", "==", user.uid),
+      orderBy("sentAt", "desc"),
+      limit(100)
+    );
+    const unsubscribeReports = onSnapshot(qReports, (snap) => {
+      const reps = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      setDeliveryReports(reps);
+    });
+
+    // Load branches
+    getDocs(query(collection(db, "branches"), where("tenantId", "==", effectiveTenantId))).then((snap) => {
+      setBranches(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+    });
+
+    // Query members for global targeting
+    getDocs(query(collection(db, "members"), where("tenantId", "==", effectiveTenantId))).then((snap) => {
+      setTotalMembersCount(snap.size);
+    });
 
     return () => {
-      unsubscribeTemplates();
-      unsubscribeAllSms();
+      unsubscribeUser();
+      unsubscribePackages();
       unsubscribeLogs();
+      unsubscribeReports();
     };
-  }, [effectiveTenantId, profile?.role, profile?.staffData?.assignedBranchId]);
+  }, [effectiveTenantId, user?.uid]);
 
-  const handleAddOrUpdateSmsConfig = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!effectiveTenantId) return;
+  // SMS calculator utilities
+  const characterCount = message.length;
+  const pagesCount = Math.ceil(characterCount / 160) || 1;
 
-    try {
-      if (editingConfigId) {
-        await updateDoc(doc(db, "sms_configs", editingConfigId), {
-          name: configForm.name || "Unnamed Gateway",
-          provider: configForm.provider,
-          apiKey: configForm.apiKey,
-          apiSecret: configForm.apiSecret,
-          senderId: configForm.senderId,
-          customUrl: configForm.customUrl || "",
-          customMethod: configForm.customMethod || "POST",
-          customBodyJson: configForm.customBodyJson || "",
-          customHeadersJson: configForm.customHeadersJson || "",
-          updatedAt: serverTimestamp(),
-        });
-        toast.success("SMS Gateway profile updated successfully!");
-      } else {
-        await addDoc(collection(db, "sms_configs"), {
-          tenantId: effectiveTenantId,
-          name: configForm.name || "Unnamed Gateway",
-          provider: configForm.provider,
-          apiKey: configForm.apiKey,
-          apiSecret: configForm.apiSecret,
-          senderId: configForm.senderId,
-          customUrl: configForm.customUrl || "",
-          customMethod: configForm.customMethod || "POST",
-          customBodyJson: configForm.customBodyJson || "",
-          customHeadersJson: configForm.customHeadersJson || "",
-          branchId: "unlinked",
-          createdAt: serverTimestamp(),
-          updatedAt: serverTimestamp(),
-        });
-        toast.success("New SMS Gateway profile created successfully!");
-      }
-      setIsConfigModalOpen(false);
-      setEditingConfigId(null);
-      setConfigForm({
-        name: "",
-        provider: "twilio",
-        apiKey: "",
-        apiSecret: "",
-        senderId: "",
-        customUrl: "",
-        customMethod: "POST",
-        customBodyJson: '{\n  "recipient": "{{to}}",\n  "message": "{{message}}",\n  "sender": "{{sender}}"\n}',
-        customHeadersJson: '{\n  "Content-Type": "application/json"\n}',
-      });
-    } catch (err: any) {
-      toast.error("Failed to save SMS config profile: " + err.message);
+  // Render formatters
+  const formatTimestamp = (ts: any) => {
+    if (!ts) return 'Just now';
+    if (typeof ts.toDate === 'function') {
+      return ts.toDate().toLocaleString();
     }
+    if (ts instanceof Date) {
+      return ts.toLocaleString();
+    }
+    return String(ts);
   };
 
-  const handleLinkConfig = async (configId: string) => {
-    if (!effectiveTenantId) return;
-    const isPastor = profile?.role === "pastor";
-    const activeLink = isPastor
-      ? profile?.staffData?.assignedBranchId || "central"
-      : "central";
+  const calculateTargetRecipientsCount = async (): Promise<string[]> => {
+    if (recipientType === "custom") {
+      return customNumbers
+        .split(/[;,\n]/)
+        .map(n => n.trim())
+        .filter(n => n.length >= 8);
+    }
+
+    // Filter members database dynamically
+    let membersRef = collection(db, "members");
+    let q = query(membersRef, where("tenantId", "==", effectiveTenantId));
+
+    if (recipientType === "branch" && targetBranchId !== "all") {
+      q = query(q, where("branchId", "==", targetBranchId));
+    }
 
     try {
-      // Unlink other profiles at the same branch level
-      const otherLinkedConfigs = smsConfigsList.filter(
-        (c) => c.branchId === activeLink,
-      );
-      for (const c of otherLinkedConfigs) {
-        if (c.id !== configId) {
-          await updateDoc(doc(db, "sms_configs", c.id), {
-            branchId: "unlinked",
-            updatedAt: serverTimestamp(),
-          });
+      const snap = await getDocs(q);
+      const phoneList: string[] = [];
+      snap.forEach(doc => {
+        const d = doc.data();
+        if (d.phoneNumber) {
+          phoneList.push(d.phoneNumber);
+        } else if (d.phone) {
+          phoneList.push(d.phone);
         }
-      }
-
-      // Link this specific one
-      await updateDoc(doc(db, "sms_configs", configId), {
-        branchId: activeLink,
-        updatedAt: serverTimestamp(),
       });
-      toast.success(
-        `Gateway successfully linked to your current ${isPastor ? "Branch" : "Central"} broadcasts!`,
-      );
-    } catch (err: any) {
-      toast.error("Failed to link gateway profile: " + err.message);
+      return phoneList;
+    } catch (err) {
+      console.error(err);
+      return [];
     }
   };
 
-  const handleUnlinkConfig = async (configId: string) => {
+  const handleSaveThreshold = async (newThreshold: number) => {
+    if (!user?.uid) return;
+    setIsUpdatingThreshold(true);
     try {
-      await updateDoc(doc(db, "sms_configs", configId), {
-        branchId: "unlinked",
-        updatedAt: serverTimestamp(),
+      await updateDoc(doc(db, "users", user.uid), {
+        smsBalanceThreshold: newThreshold
       });
-      toast.success("Gateway profile unlinked successfully.");
+      toast.success(`Low SMS balance warning threshold updated to ${newThreshold} credits.`);
     } catch (err: any) {
-      toast.error("Failed to unlink: " + err.message);
+      toast.error("Failed to update threshold check: " + err.message);
+    } finally {
+      setIsUpdatingThreshold(false);
     }
   };
 
-  const handleDeleteConfig = async (configId: string) => {
-    if (
-      !confirm(
-        "Are you sure you want to delete this SMS Gateway Profile? This action is irreversible.",
-      )
-    )
-      return;
-    try {
-      await updateDoc(doc(db, "sms_configs", configId), {
-        tenantId: "deleted_" + effectiveTenantId,
-        branchId: "unlinked",
-        updatedAt: serverTimestamp(),
-      });
-      toast.success("Gateway profile removed successfully.");
-    } catch (err: any) {
-      toast.error("Failed to delete gateway config: " + err.message);
-    }
-  };
-
-  const handleSendBulkSms = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!smsConfig) {
-      toast.error("Please configure your central SMS Gateway first");
+  const handleSendBroadcast = async () => {
+    if (!message.trim()) {
+      toast.warning("Broadcast message must not be empty.");
       return;
     }
-    setSmsLoading(true);
+
+    setIsSending(true);
     try {
-      const tenantId = effectiveTenantId;
-      const type = smsData.recipientType;
-      const branchId = smsData.targetBranchId;
-
-      let phoneNumbers: string[] = [];
-
-      // 1. Fetch from Members
-      if (["global-members", "branch-all", "branch-members"].includes(type)) {
-        let q = query(
-          collection(db, "members"),
-          where("tenantId", "==", tenantId),
-        );
-        if (type.startsWith("branch-") && branchId !== "all") {
-          q = query(q, where("branchId", "==", branchId));
-        }
-        const snap = await getDocs(q);
-        phoneNumbers = [
-          ...phoneNumbers,
-          ...snap.docs.map((d) => d.data().phone).filter((p) => !!p),
-        ];
-      }
-
-      // 2. Fetch from Staff
-      if (
-        [
-          "global-staff",
-          "global-pastors",
-          "global-workers",
-          "branch-all",
-          "branch-staff",
-        ].includes(type)
-      ) {
-        let q = query(
-          collection(db, "staff"),
-          where("tenantId", "==", tenantId),
-        );
-
-        if (type === "global-pastors") {
-          q = query(q, where("role", "==", "pastor"));
-        } else if (type === "global-workers") {
-          q = query(q, where("role", "==", "worker"));
-        }
-
-        if (type.startsWith("branch-") && branchId !== "all") {
-          q = query(q, where("assignedBranchId", "==", branchId));
-        }
-
-        const snap = await getDocs(q);
-        phoneNumbers = [
-          ...phoneNumbers,
-          ...snap.docs.map((d) => d.data().phone).filter((p) => !!p),
-        ];
-      }
-
-      // Remove duplicates
-      const uniqueNumbers = [...new Set(phoneNumbers)];
-
-      if (uniqueNumbers.length === 0) {
-        toast.error("No recipients with phone numbers found for this scope");
+      // 1. Resolve recipients
+      const phoneNumbers = await calculateTargetRecipientsCount();
+      if (phoneNumbers.length === 0) {
+        toast.error("No valid filtered recipient phone numbers resolved or entered.");
+        setIsSending(false);
         return;
       }
 
-      // Dispatch the real SMS via local server API proxy to mask API credentials and handle protocols
+      const totalCreditsRequired = phoneNumbers.length * pagesCount;
+      if (smsBalance < totalCreditsRequired) {
+        toast.error(`Low Credits Balance. Requires ${totalCreditsRequired} SMS credits, but you have ${smsBalance} units.`);
+        setIsSending(false);
+        return;
+      }
+
+      // 2. Transmit through centralized system gateway endpoint
       const response = await fetch("/api/sms/send", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json"
-        },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          config: smsConfig,
-          recipients: uniqueNumbers,
-          message: smsData.message
+          userId: user?.uid,
+          recipients: phoneNumbers,
+          message: message,
+          isSuperAdminBypass: false
         })
       });
 
+      const data = await response.json();
       if (!response.ok) {
-        const errJson = await response.json().catch(() => ({}));
-        throw new Error(errJson.error || `HTTP ${response.status} sending failed`);
+        throw new Error(data.error || "Gateway response failed");
       }
 
-      await addDoc(collection(db, "sms_logs"), {
-        tenantId,
-        branchId: profile?.staffData?.assignedBranchId || "central",
-        recipientCount: uniqueNumbers.length,
-        message: smsData.message,
-        status: "broadcasted",
-        scope: type,
-        sentAt: serverTimestamp(),
-      });
-
-      toast.success(
-        `Successfully broadcasted via "${smsConfig.name || "Main Gateway"}" [${smsConfig.provider.toUpperCase()}] to ${uniqueNumbers.length} recipients!`,
-      );
-      setSmsData({ ...smsData, message: "" });
-    } catch (err: any) {
-      toast.error("Broadcast failed: " + err.message);
+      toast.success(`Successfully dispatched broadcast list containing ${phoneNumbers.length} recipients. Deducted ${totalCreditsRequired} credits.`);
+      setMessage("");
+      setCustomNumbers("");
+    } catch (error: any) {
+      toast.error("Transmission Failed: " + error.message);
     } finally {
-      setSmsLoading(false);
+      setIsSending(false);
     }
   };
 
-  const saveAsTemplate = async (content: string) => {
-    if (!content) return;
-    if (!effectiveTenantId) return;
-    try {
-      await addDoc(collection(db, "sms_templates"), {
-        tenantId: effectiveTenantId,
-        name: `Auto-saved Template ${format(new Date(), "HH:mm")}`,
-        content,
-        category: "custom",
-        createdAt: serverTimestamp(),
-      });
-      toast.success("Message saved as a custom template");
-    } catch (err: any) {
-      toast.error("Failed to save template");
-    }
+  const loadScript = (src: string, globalName: string): Promise<boolean> => {
+    return new Promise((resolve) => {
+      if ((window as any)[globalName]) {
+        resolve(true);
+        return;
+      }
+      const script = document.createElement("script");
+      script.src = src;
+      script.async = true;
+      script.onload = () => resolve(true);
+      script.onerror = () => resolve(false);
+      document.body.appendChild(script);
+    });
   };
 
-  const handleCreateCustomTemplate = async (e: React.FormEvent) => {
+  const handleCheckoutPackage = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!effectiveTenantId) return;
-    try {
-      await addDoc(collection(db, "sms_templates"), {
-        ...newTemplate,
-        tenantId: effectiveTenantId,
-        createdAt: serverTimestamp(),
-      });
-      setIsTemplateModalOpen(false);
-      setNewTemplate({ name: "", content: "", category: "custom" });
-      toast.success("Custom template created!");
-    } catch (err: any) {
-      toast.error("Failed to create template");
+    if (!isBuyingPack) return;
+    setIsProcessingCheckout(true);
+
+    if (paymentProvider === 'paystack') {
+      try {
+        const loaded = await loadScript("https://js.paystack.co/v1/inline.js", "PaystackPop");
+        if (!loaded) {
+          throw new Error("Unable to load Paystack script from js.paystack.co. Please check internet connection.");
+        }
+
+        const paystackKey = import.meta.env.VITE_PAYSTACK_PUBLIC_KEY || "pk_test_e3fd79bc9dc8c5da84ab6be4149806b7cb0bebfd";
+        const emailAddress = user?.email || "billing@ecclesia.com";
+        const totalAmountPesewas = Math.round(isBuyingPack.price * 100);
+
+        const paystack = (window as any).PaystackPop.setup({
+          key: paystackKey,
+          email: emailAddress,
+          amount: totalAmountPesewas,
+          currency: "GHS",
+          ref: `ecclesia-paystack-${Date.now()}`,
+          callback: async (response: any) => {
+            try {
+              toast.info("Paystack authorization received. Completing credit top-up...");
+              const verifyResponse = await fetch("/api/payment/verify", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                  userId: user?.uid,
+                  packageId: isBuyingPack.id,
+                  paymentProvider: "PAYSTACK",
+                  reference: response.reference
+                })
+              });
+
+              const body = await verifyResponse.json();
+              if (!verifyResponse.ok) {
+                throw new Error(body.error || "Verification issue");
+              }
+
+              toast.success(`Refill Approved! Added ${isBuyingPack.smsCount} credits successfully.`);
+              setIsBuyingPack(null);
+            } catch (err: any) {
+              toast.error("Internal verification error: " + err.message);
+            } finally {
+              setIsProcessingCheckout(false);
+            }
+          },
+          onClose: () => {
+            toast.warning("Payment process cancelled.");
+            setIsProcessingCheckout(false);
+          }
+        });
+
+        paystack.openIframe();
+      } catch (err: any) {
+        toast.error("Paystack Integration error: " + err.message);
+        setIsProcessingCheckout(false);
+      }
+    } else if (paymentProvider === 'flutterwave') {
+      try {
+        const loaded = await loadScript("https://checkout.flutterwave.com/v3.js", "FlutterwaveCheckout");
+        if (!loaded) {
+          throw new Error("Unable to load Flutterwave script from checkout.flutterwave.com.");
+        }
+
+        const flwPublicKey = import.meta.env.VITE_FLUTTERWAVE_PUBLIC_KEY || "FLWPUBK_TEST-e0349b1ca4ebfc68fa82a53bb89db7cf-X";
+        const emailAddress = user?.email || "billing@ecclesia.com";
+
+        const flutterwave = (window as any).FlutterwaveCheckout({
+          public_key: flwPublicKey,
+          tx_ref: `ecclesia-flw-${Date.now()}`,
+          amount: isBuyingPack.price,
+          currency: "GHS",
+          payment_options: "card, mobilemoneyghana",
+          customer: {
+            email: emailAddress,
+            phone_number: checkoutPhone || "0244000000",
+            name: user?.displayName || "Church Admin"
+          },
+          customizations: {
+            title: "Ecclesia SaaS SMS",
+            description: `Payment for ${isBuyingPack.smsCount} SMS units pack`,
+            logo: "https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=150&auto=format&fit=crop&q=60"
+          },
+          callback: async (response: any) => {
+            try {
+              if (response.status === "successful" || response.status === "completed") {
+                toast.info("Flutterwave payment completed. Processing top-up...");
+                const verifyResponse = await fetch("/api/payment/verify", {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({
+                    userId: user?.uid,
+                    packageId: isBuyingPack.id,
+                    paymentProvider: "FLUTTERWAVE",
+                    reference: response.transaction_id || `flw-${Date.now()}`
+                  })
+                });
+
+                const body = await verifyResponse.json();
+                if (!verifyResponse.ok) {
+                  throw new Error(body.error || "Verification failed");
+                }
+
+                toast.success(`Refill Approved! Added ${isBuyingPack.smsCount} credits successfully.`);
+                setIsBuyingPack(null);
+              } else {
+                toast.error("Flutterwave transaction returned status: " + response.status);
+              }
+            } catch (err: any) {
+              toast.error("Internal verification error: " + err.message);
+            } finally {
+              setIsProcessingCheckout(false);
+            }
+          },
+          onclose: () => {
+            toast.warning("Payment window closed.");
+            setIsProcessingCheckout(false);
+          }
+        });
+      } catch (err: any) {
+        toast.error("Flutterwave Integration error: " + err.message);
+        setIsProcessingCheckout(false);
+      }
+    } else {
+      // Hubtel, Momo, or Custom simulator:
+      try {
+        const reference = `ecclesia-momo-${Date.now()}`;
+        const response = await fetch("/api/payment/verify", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            userId: user?.uid,
+            packageId: isBuyingPack.id,
+            paymentProvider: paymentProvider.toUpperCase(),
+            reference: reference
+          })
+        });
+
+        const body = await response.json();
+        if (!response.ok) {
+          throw new Error(body.error || "Verification issue");
+        }
+
+        toast.success(`Refill Approved via Mobile Money! Added ${isBuyingPack.smsCount} credits.`);
+        setIsBuyingPack(null);
+      } catch (err: any) {
+        toast.error("Payment processing error: " + err.message);
+      } finally {
+        setIsProcessingCheckout(false);
+      }
     }
   };
 
-  if (loading)
-    return (
-      <div className="p-12 text-center text-slate-400 font-bold animate-pulse uppercase tracking-widest">
-        Initialising SMS Hub...
-      </div>
-    );
+  const exportDeliveryLogsCSV = () => {
+    if (deliveryReports.length === 0) {
+      toast.warning("No logs to export.");
+      return;
+    }
+    const headers = "Recipient,Message,Status,Date/Time\n";
+    const rows = deliveryReports.map(rep => 
+      `"${rep.recipient}","${rep.message?.replace(/"/g, '""')}","${rep.status}","${formatTimestamp(rep.sentAt)}"`
+    ).join("\n");
+
+    const blob = new Blob([headers + rows], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.setAttribute("download", `Siasore_SMS_Delivery_Report_${new Date().toISOString().substring(0,10)}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  const copyTemplate = (content: string) => {
+    setMessage(content);
+    toast.info("Template content paired into Broadcast Desk!");
+    setActiveTab('send');
+  };
+
+  const filteredReports = deliveryReports.filter(rep => 
+    rep.recipient?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    rep.message?.toLowerCase().includes(searchQuery.toLowerCase())
+  );
 
   return (
-    <div className="space-y-8">
-      <div>
-        <h1 className="text-3xl font-black tracking-tight text-slate-900 uppercase">
-          Communications Center
-        </h1>
-        <p className="text-slate-500 mt-1 italic">
-          Centralised SMS broadcasting and engagement portal.
-        </p>
+    <div className="space-y-6 font-sans">
+      {/* Wallet Balance Widget */}
+      <div className="bg-slate-900 border border-slate-800 text-white rounded-xl p-5 md:p-6 shadow-xl relative overflow-hidden flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+        <div className="absolute top-0 right-0 w-32 h-32 bg-indigo-500 rounded-full blur-2xl opacity-10 -mr-16 -mt-16 pointer-events-none"></div>
+        <div>
+          <span className="text-[10px] uppercase font-bold tracking-widest text-indigo-400">Ecclesia Consolidated SaaS Wallet</span>
+          <h2 className="text-2xl font-black mt-1 flex items-center gap-2">
+            <Coins className="w-6 h-6 text-yellow-500 animate-spin" />
+            {smsBalance} SMS Credits
+          </h2>
+          <p className="text-xs text-slate-400 mt-1">
+            Always routes messages via centralized Siasore Core Gateway with 100% active endpoints uptime.
+          </p>
+        </div>
+        <Button 
+          onClick={() => setActiveTab('buy')} 
+          className="bg-indigo-600 hover:bg-indigo-700 text-xs font-bold uppercase tracking-wider h-10 px-5 gap-2"
+        >
+          <ShoppingCart className="w-4 h-4" /> Top-Up Credits Pack
+        </Button>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <Card className="border-slate-200">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-[10px] font-black uppercase text-slate-400 flex items-center gap-2">
-              <Users className="w-4 h-4" /> Reachable Network
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-black">
-              {stats.totalMembers} Members
-            </div>
-            <p className="text-[10px] text-slate-400 font-bold uppercase mt-1">
-              Across {stats.activeBranches} branches
-            </p>
-          </CardContent>
-        </Card>
-
-        <Card className="border-slate-200 bg-indigo-600 text-white shadow-xl shadow-indigo-100">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-[10px] font-bold text-indigo-200 uppercase">
-              Gateway Efficiency
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-black">
-              {smsConfig ? "Connected" : "Offline"}
-            </div>
-            <p className="text-[10px] text-indigo-200 font-bold uppercase mt-1">
-              {smsConfig?.provider || "No provider"} configured
-            </p>
-          </CardContent>
-        </Card>
-
-        <Card className="border-slate-200">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-[10px] font-black uppercase text-slate-400">
-              Monthly Usage
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-black">
-              {smsLogs.reduce((acc, l) => acc + (l.recipientCount || 0), 0)} SMS
-            </div>
-            <div className="text-[10px] text-emerald-600 font-bold uppercase mt-1 flex items-center gap-1">
-              <TrendingUp className="w-3 h-3" /> Growth: +5% since last month
-            </div>
-          </CardContent>
-        </Card>
+      {/* Primary Toggling Interface */}
+      <div className="flex border-b border-slate-200 overflow-x-auto gap-2">
+        <button
+          onClick={() => setActiveTab('send')}
+          className={cn(
+            "px-4 py-2 text-xs font-bold uppercase tracking-widest whitespace-nowrap border-b-2 transition-all",
+            activeTab === 'send' ? "border-indigo-600 text-indigo-600" : "border-transparent text-slate-400 hover:text-slate-600"
+          )}
+        >
+          Broadcast Desk
+        </button>
+        <button
+          onClick={() => setActiveTab('buy')}
+          className={cn(
+            "px-4 py-2 text-xs font-bold uppercase tracking-widest whitespace-nowrap border-b-2 transition-all",
+            activeTab === 'buy' ? "border-indigo-600 text-indigo-600" : "border-transparent text-slate-400 hover:text-slate-600"
+          )}
+        >
+          Buy Credits
+        </button>
+        <button
+          onClick={() => setActiveTab('logs')}
+          className={cn(
+            "px-4 py-2 text-xs font-bold uppercase tracking-widest whitespace-nowrap border-b-2 transition-all",
+            activeTab === 'logs' ? "border-indigo-600 text-indigo-600" : "border-transparent text-slate-400 hover:text-slate-600"
+          )}
+        >
+          Outgoing Broadcasts
+        </button>
+        <button
+          onClick={() => setActiveTab('reports')}
+          className={cn(
+            "px-4 py-2 text-xs font-bold uppercase tracking-widest whitespace-nowrap border-b-2 transition-all",
+            activeTab === 'reports' ? "border-indigo-600 text-indigo-600" : "border-transparent text-slate-400 hover:text-slate-600"
+          )}
+        >
+          Recipient Audits
+        </button>
+        <button
+          onClick={() => setActiveTab('templates')}
+          className={cn(
+            "px-4 py-2 text-xs font-bold uppercase tracking-widest whitespace-nowrap border-b-2 transition-all",
+            activeTab === 'templates' ? "border-indigo-600 text-indigo-600" : "border-transparent text-slate-400 hover:text-slate-600"
+          )}
+        >
+          Message Assist
+        </button>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-        <div className="lg:col-span-2 space-y-8">
-          <Card className="border-slate-200">
-            <CardHeader className="flex flex-row items-center justify-between">
-              <div>
-                <CardTitle className="text-lg font-bold">
-                  Network Broadcast
-                </CardTitle>
-                <CardDescription>
-                  Send a mass message across the entire church hierarchy.
-                </CardDescription>
-              </div>
-              <Target className="w-5 h-5 text-indigo-600 opacity-20" />
+      {/* Tab Content: Broadcast Send */}
+      {activeTab === 'send' && (
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 animate-fadeIn">
+          {/* Main Card */}
+          <Card className="lg:col-span-2 border-slate-200 shadow-sm bg-white flex flex-col justify-between">
+            <CardHeader className="py-4 border-b border-slate-50">
+              <CardTitle className="text-sm font-black uppercase tracking-wider text-slate-700 flex items-center gap-1.5">
+                <Send className="w-4 h-4 text-indigo-605 text-indigo-600" />
+                Produce SMS Broadcast
+              </CardTitle>
             </CardHeader>
-            <CardContent>
-              <form onSubmit={handleSendBulkSms} className="space-y-6">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label className="text-[10px] font-black uppercase text-slate-500">
-                      Recipient Scope
-                    </Label>
-                    <Select
-                      value={smsData.recipientType}
-                      onValueChange={(v) =>
-                        setSmsData({ ...smsData, recipientType: v })
-                      }
-                    >
-                      <SelectTrigger className="border-slate-200 shadow-sm">
-                        <SelectValue />
+            <CardContent className="p-6 space-y-5">
+              {/* Target Filtering options */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-1.5">
+                  <Label className="text-[10px] font-black uppercase tracking-widest text-slate-450">Delivery Targeting</Label>
+                  <Select value={recipientType} onValueChange={(val: any) => setRecipientType(val)}>
+                    <SelectTrigger className="bg-slate-50/50">
+                      <SelectValue placeholder="Select strategy" />
+                    </SelectTrigger>
+                    <SelectContent className="bg-white">
+                      <SelectItem value="custom">Custom Phone List</SelectItem>
+                      <SelectItem value="global">All Church Members ({totalMembersCount})</SelectItem>
+                      <SelectItem value="branch">Branch Filter</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                {recipientType === "branch" && (
+                  <div className="space-y-1.5 animate-fadeIn">
+                    <Label className="text-[10px] font-black uppercase tracking-widest text-slate-450">Specific Branch</Label>
+                    <Select value={targetBranchId} onValueChange={setTargetBranchId}>
+                      <SelectTrigger className="bg-slate-50/50">
+                        <SelectValue placeholder="All Branches" />
                       </SelectTrigger>
-                      <SelectContent>
-                        {profile?.role === "church-admin" && (
-                          <>
-                            <SelectItem value="global-members">
-                              All Members (Global)
-                            </SelectItem>
-                            <SelectItem value="global-pastors">
-                              All Pastors (Global)
-                            </SelectItem>
-                            <SelectItem value="global-workers">
-                              All Workers (Global)
-                            </SelectItem>
-                            <SelectItem value="global-staff">
-                              All Personnel (Global)
-                            </SelectItem>
-                          </>
-                        )}
-                        <SelectItem value="branch-all">
-                          Branch (All Recipients)
-                        </SelectItem>
-                        <SelectItem value="branch-members">
-                          Branch (Members Only)
-                        </SelectItem>
-                        <SelectItem value="branch-staff">
-                          Branch (Staff Only)
-                        </SelectItem>
+                      <SelectContent className="bg-white">
+                        <SelectItem value="all">Global (All Branches)</SelectItem>
+                        {branches.map(b => (
+                          <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>
+                        ))}
                       </SelectContent>
                     </Select>
                   </div>
-                  {smsData.recipientType.startsWith("branch-") &&
-                    (profile?.role === "church-admin" ||
-                      !profile?.staffData?.assignedBranchId) && (
-                      <div className="space-y-2">
-                        <Label className="text-[10px] font-black uppercase text-slate-500">
-                          Target Branch
-                        </Label>
-                        <Select
-                          value={smsData.targetBranchId}
-                          onValueChange={(v) =>
-                            setSmsData({ ...smsData, targetBranchId: v })
-                          }
-                        >
-                          <SelectTrigger className="border-slate-200 shadow-sm">
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {branches.map((b) => (
-                              <SelectItem key={b.id} value={b.id}>
-                                {b.name}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      </div>
-                    )}
+                )}
+              </div>
+
+              {recipientType === "custom" && (
+                <div className="space-y-1.5 animate-fadeIn">
+                  <Label className="text-[10px] font-black uppercase tracking-widest text-slate-450">Target Mobile Numbers</Label>
+                  <Textarea 
+                    placeholder="Enter phone numbers separated by commas or lines, e.g. 0555000000, +233544123456"
+                    value={customNumbers}
+                    onChange={(e) => setCustomNumbers(e.target.value)}
+                    className="h-20 bg-slate-50/20 font-mono text-xs"
+                  />
+                  <p className="text-[9px] text-slate-450">Supports standard country prefix codes.</p>
                 </div>
+              )}
 
-                <div className="space-y-4">
-                  <div className="flex items-center justify-between">
-                    <Label className="text-[10px] font-black uppercase text-slate-500 flex items-center gap-2">
-                      <CalendarDays className="w-3.5 h-3.5" /> Seasonal &
-                      Template Messages
-                    </Label>
-                    <Dialog
-                      open={isTemplateModalOpen}
-                      onOpenChange={setIsTemplateModalOpen}
-                    >
-                      <DialogTrigger
-                        render={
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className="h-6 text-[9px] font-bold uppercase tracking-widest gap-1 hover:text-indigo-600"
-                          >
-                            <PlusCircle className="w-3 h-3" /> New Custom
-                            Template
-                          </Button>
-                        }
-                      />
-                      <DialogContent>
-                        <DialogHeader>
-                          <DialogTitle>Create SMS Template</DialogTitle>
-                          <DialogDescription>
-                            Save a message to quickly reuse it later.
-                          </DialogDescription>
-                        </DialogHeader>
-                        <form
-                          onSubmit={handleCreateCustomTemplate}
-                          className="space-y-4 mt-4"
-                        >
-                          <div className="space-y-2">
-                            <Label>Template Name</Label>
-                            <Input
-                              placeholder="e.g. Mid-week Service Reminder"
-                              value={newTemplate.name}
-                              onChange={(e) =>
-                                setNewTemplate({
-                                  ...newTemplate,
-                                  name: e.target.value,
-                                })
-                              }
-                              required
-                            />
-                          </div>
-                          <div className="space-y-2">
-                            <Label>Category</Label>
-                            <Select
-                              value={newTemplate.category}
-                              onValueChange={(v) =>
-                                setNewTemplate({ ...newTemplate, category: v })
-                              }
-                            >
-                              <SelectTrigger>
-                                <SelectValue />
-                              </SelectTrigger>
-                              <SelectContent>
-                                <SelectItem value="seasonal">
-                                  Seasonal
-                                </SelectItem>
-                                <SelectItem value="service">Service</SelectItem>
-                                <SelectItem value="notice">Notice</SelectItem>
-                                <SelectItem value="custom">Custom</SelectItem>
-                              </SelectContent>
-                            </Select>
-                          </div>
-                          <div className="space-y-2">
-                            <Label>Content (Max 160 chars)</Label>
-                            <textarea
-                              className="w-full h-24 p-3 rounded-lg border border-slate-200 text-sm outline-none focus:ring-1 focus:ring-indigo-500"
-                              placeholder="Type message content..."
-                              maxLength={160}
-                              value={newTemplate.content}
-                              onChange={(e) =>
-                                setNewTemplate({
-                                  ...newTemplate,
-                                  content: e.target.value,
-                                })
-                              }
-                              required
-                            />
-                          </div>
-                          <DialogFooter>
-                            <Button type="submit" className="bg-indigo-600">
-                              Save Template
-                            </Button>
-                          </DialogFooter>
-                        </form>
-                      </DialogContent>
-                    </Dialog>
-                  </div>
-
-                  <div className="flex gap-2 pb-2 overflow-x-auto scrollbar-hide">
-                    {seasonalTemplates.map((t, idx) => (
-                      <Button
-                        key={idx}
-                        type="button"
-                        variant="outline"
-                        className="h-auto py-2 px-3 flex-shrink-0 flex flex-col items-start gap-1 border-slate-200 hover:border-indigo-300 hover:bg-slate-50 transition-all text-left"
-                        onClick={() =>
-                          setSmsData({ ...smsData, message: t.content })
-                        }
-                      >
-                        <span className="text-[9px] font-black uppercase text-indigo-600 flex items-center gap-1">
-                          <Sparkles className="w-2.5 h-2.5" /> {t.category}
-                        </span>
-                        <span className="text-[11px] font-bold text-slate-800">
-                          {t.name}
-                        </span>
-                      </Button>
-                    ))}
-                    {customTemplates.map((t) => (
-                      <Button
-                        key={t.id}
-                        type="button"
-                        variant="outline"
-                        className="h-auto py-2 px-3 flex-shrink-0 flex flex-col items-start gap-1 border-indigo-100 bg-indigo-50/20 hover:border-indigo-400 hover:bg-white transition-all text-left group"
-                        onClick={() =>
-                          setSmsData({ ...smsData, message: t.content })
-                        }
-                      >
-                        <span className="text-[9px] font-black uppercase text-indigo-600 flex items-center justify-between w-full">
-                          Custom
-                        </span>
-                        <span className="text-[11px] font-bold text-slate-800">
-                          {t.name}
-                        </span>
-                      </Button>
-                    ))}
-                  </div>
-
-                  <div className="space-y-2 pt-2">
-                    <div className="flex items-center justify-between">
-                      <Label className="text-[10px] font-black uppercase text-slate-500">
-                        Broadcast Message
-                      </Label>
-                      <Button
-                        type="button"
-                        variant="link"
-                        className="h-auto p-0 text-[10px] font-bold text-indigo-600"
-                        onClick={() => saveAsTemplate(smsData.message)}
-                        disabled={!smsData.message}
-                      >
-                        Save current as custom template
-                      </Button>
-                    </div>
-                    <textarea
-                      className="w-full h-32 p-4 rounded-xl border border-slate-200 text-sm focus:ring-2 focus:ring-indigo-500 outline-none shadow-inner bg-slate-50/50"
-                      placeholder="Church alert: Sunday service starts at 8AM sharp. Don't miss out!"
-                      value={smsData.message}
-                      onChange={(e) =>
-                        setSmsData({ ...smsData, message: e.target.value })
-                      }
-                      maxLength={160}
-                      required
-                    />
-                    <div className="flex justify-between items-center text-[10px] font-bold">
-                      <span
-                        className={cn(
-                          smsData.message.length > 140
-                            ? "text-amber-600"
-                            : "text-slate-400",
-                        )}
-                      >
-                        {smsData.message.length}/160 characters
-                      </span>
-                      <span className="text-slate-400">
-                        1 standard SMS page
-                      </span>
-                    </div>
-                  </div>
+              {/* Message Core Input */}
+              <div className="space-y-1.5">
+                <Label className="text-[10px] font-black uppercase tracking-widest text-slate-450">Message Payload</Label>
+                <div className="relative">
+                  <Textarea 
+                    placeholder="Enter message body content here..."
+                    value={message}
+                    onChange={(e) => setMessage(e.target.value)}
+                    maxLength={800}
+                    className="min-h-[140px] bg-slate-50/20"
+                  />
                 </div>
+                <div className="flex justify-between items-center text-[10px] font-bold text-slate-500 bg-slate-50 p-2.5 rounded border border-slate-100 mt-1">
+                  <span>Character Unit Count: <b className="text-slate-900">{characterCount}</b></span>
+                  <span>Calculated Pages: <b className="text-indigo-600 font-black">{pagesCount} Page(s)</b></span>
+                  <span>Max limit: 800 chars</span>
+                </div>
+              </div>
 
-                <Button
-                  type="submit"
-                  disabled={smsLoading || !smsData.message}
-                  className="w-full bg-slate-900 hover:bg-slate-800 text-sm font-black uppercase tracking-widest h-14 gap-3 shadow-lg shadow-slate-100"
-                >
-                  {smsLoading ? (
-                    "Broadcasting..."
-                  ) : (
-                    <>
-                      <Send className="w-5 h-5" /> Execute Broadcast
-                    </>
-                  )}
-                </Button>
-              </form>
+              <div className="p-4 bg-sky-50 text-sky-800 rounded-lg flex items-start gap-2.5 border border-sky-100 text-xs">
+                <ShieldCheck className="w-4.5 h-4.5 text-sky-600 mt-0.5" />
+                <p>
+                  Siasore anti-spam system is enabled. Messages are securely stored inside centrally audited SaaS files. Under GDPR compliance, we sanitize non-delivery metrics.
+                </p>
+              </div>
             </CardContent>
+            <CardFooter className="py-4 border-t border-slate-50 flex justify-end">
+              <Button 
+                onClick={handleSendBroadcast} 
+                className="bg-indigo-650 bg-indigo-600 hover:bg-indigo-700 text-xs uppercase tracking-widest font-black py-2.5 px-6"
+                disabled={isSending}
+              >
+                {isSending ? "Routing message..." : "Dispatch Broadcast"}
+              </Button>
+            </CardFooter>
           </Card>
 
-          <Card className="border-slate-200">
-            <CardHeader className="border-b border-slate-50 py-4 flex flex-row items-center justify-between">
-              <CardTitle className="text-[10px] font-black uppercase text-slate-500 tracking-widest">
-                Recent Activity
-              </CardTitle>
-              <History className="w-4 h-4 text-slate-300" />
-            </CardHeader>
-            <CardContent className="p-0">
+          {/* Quick Stats Helper sidebar */}
+          <div className="space-y-6">
+            <Card className="border-slate-200 shadow-sm bg-indigo-50/50">
+              <CardHeader className="pb-3">
+                <CardTitle className="text-xs font-black uppercase tracking-widest text-indigo-700">Broadcast Diagnostics</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4 text-xs font-medium">
+                <div className="flex justify-between border-b pb-2">
+                  <span className="text-slate-500">Gateway Status</span>
+                  <Badge variant="outline" className="bg-emerald-50 text-emerald-700 font-bold">ACTIVE (CENTRAL)</Badge>
+                </div>
+                <div className="flex justify-between border-b pb-2">
+                  <span className="text-slate-500">Your Wallet Credits</span>
+                  <span className="font-mono font-bold text-slate-900">{smsBalance} SMS</span>
+                </div>
+                <div className="flex justify-between border-b pb-2">
+                  <span className="text-slate-500">Page length policy</span>
+                  <span className="text-slate-700">160 characters per unit</span>
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card className="border-slate-200 shadow-sm bg-white">
+              <CardHeader className="pb-3">
+                <CardTitle className="text-xs font-black uppercase tracking-widest text-indigo-700 flex items-center gap-1.5">
+                  <AlertCircle className="w-4 h-4 text-indigo-600 animate-pulse" />
+                  Alert Limit Threshold
+                </CardTitle>
+                <CardDescription className="text-[10px]">Configure the minimum SMS credits balance required before dispatching an in-app warning notice.</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4 text-xs">
+                <div className="space-y-1.5">
+                  <Label htmlFor="threshold-select" className="text-[10px] font-black uppercase tracking-widest text-slate-400">Warning Threshold Limit</Label>
+                  <div className="flex items-center gap-2">
+                    <Input
+                      id="threshold-select"
+                      type="number"
+                      min="5"
+                      max="500"
+                      value={smsThreshold}
+                      onChange={(e) => setSmsThreshold(Number(e.target.value))}
+                      className="font-mono text-xs w-24 h-9"
+                    />
+                    <span className="text-slate-400 font-bold uppercase text-[9px]">credits limit</span>
+                  </div>
+                </div>
+                <Button
+                  onClick={() => handleSaveThreshold(smsThreshold)}
+                  disabled={isUpdatingThreshold}
+                  className="w-full bg-slate-950 hover:bg-slate-900 border text-white font-bold tracking-wider uppercase text-[10px] h-9"
+                >
+                  {isUpdatingThreshold ? "Saving limit..." : "Save Configured Limit"}
+                </Button>
+              </CardContent>
+            </Card>
+
+            <Card className="border-slate-200 shadow-sm bg-white">
+              <CardHeader className="pb-2">
+                <CardTitle className="text-xs font-bold uppercase tracking-wider text-slate-655 text-slate-500">Helper tags</CardTitle>
+                <CardDescription className="text-[10px]">Pair these variable templates inside customized broadcast bodies:</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-2 text-xs font-mono">
+                <div className="p-2 bg-slate-50 border rounded-lg">
+                  <p className="text-slate-500 font-bold">&#123;&#123;FirstName&#125;&#125;</p>
+                  <p className="text-[10px] mt-0.5 text-slate-400 font-sans">Translates dynamically to member's legal first name.</p>
+                </div>
+                <div className="p-2 bg-slate-50 border rounded-lg">
+                  <p className="text-slate-500 font-bold">&#123;&#123;ChurchName&#125;&#125;</p>
+                  <p className="text-[10px] mt-0.5 text-slate-400 font-sans">Pairs the church name profile directly inside standard templates.</p>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+        </div>
+      )}
+
+      {/* Tab: Buy Credits */}
+      {activeTab === 'buy' && (
+        <div className="space-y-6 animate-fadeIn">
+          <div>
+            <h3 className="text-lg font-black text-slate-900 uppercase tracking-tight">Purchase SMS Credit Packages</h3>
+            <p className="text-xs text-slate-450 mt-1">Choose a credits volume tier below with secure, instantaneous digital clearing.</p>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            {packages.map((pkg) => (
+              <Card key={pkg.id} className="border-slate-200 hover:border-indigo-300 shadow-sm hover:shadow-md transition-all flex flex-col justify-between overflow-hidden bg-white">
+                <div className="bg-slate-50 border-b border-slate-100 p-4 shrink-0 flex justify-between items-center bg-indigo-50/20">
+                  <span className="text-xs font-black uppercase text-indigo-700 tracking-wider font-mono">{pkg.name}</span>
+                  <Badge className="bg-slate-900 text-white font-bold">{pkg.smsCount} SMS Units</Badge>
+                </div>
+                <CardContent className="p-6 text-center space-y-4 flex-1 flex flex-col justify-between">
+                  <div className="py-4">
+                    <p className="text-4xl font-black text-slate-900 tracking-tight">GH₵{pkg.price}</p>
+                    <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400 mt-2">
+                      Unit Expense Rate: GH₵{(pkg.price / pkg.smsCount).toFixed(3)} per standard SMS
+                    </p>
+                  </div>
+                  
+                  <Button 
+                    onClick={() => {
+                      setIsBuyingPack(pkg);
+                      setCheckoutPhone("");
+                    }}
+                    className="w-full bg-indigo-650 bg-indigo-600 hover:bg-indigo-700 font-black uppercase tracking-wider text-xs h-10"
+                  >
+                    Select credit pack
+                  </Button>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+
+          {/* Checkout Checkout Dialog Modal */}
+          {isBuyingPack && (
+            <Dialog open={true} onOpenChange={() => setIsBuyingPack(null)}>
+              <DialogContent className="bg-white max-w-md">
+                <DialogHeader>
+                  <DialogTitle className="flex items-center gap-2">
+                    <CreditCard className="w-5 h-5 text-indigo-600" />
+                    Complete Digital checkout
+                  </DialogTitle>
+                  <DialogDescription>
+                    Secure payment provider interface with instant database credit topup.
+                  </DialogDescription>
+                </DialogHeader>
+
+                <form onSubmit={handleCheckoutPackage} className="space-y-4 mt-2">
+                  <div className="p-3.5 bg-slate-50 border rounded-lg space-y-1 text-xs">
+                    <div className="flex justify-between"><span className="text-slate-500">Refill Package:</span><strong className="text-slate-900 font-bold">{isBuyingPack.name}</strong></div>
+                    <div className="flex justify-between"><span className="text-slate-500">Units Allocated:</span><strong className="text-indigo-600 font-black">+{isBuyingPack.smsCount} SMS</strong></div>
+                    <div className="flex justify-between"><span className="text-slate-500">Total charge rate:</span><strong className="text-slate-950 text-sm font-black">GH₵{isBuyingPack.price}</strong></div>
+                  </div>
+
+                  <div className="space-y-3 border-t pt-3">
+                    <Label className="text-[10px] font-black uppercase tracking-widest text-slate-450">Select Method</Label>
+                    <div className="grid grid-cols-2 gap-2 mt-1">
+                      <button 
+                        type="button"
+                        onClick={() => setPaymentProvider('paystack')}
+                        className={cn("p-2 border rounded text-xs font-bold transition-all", paymentProvider === 'paystack' ? "border-indigo-600 bg-indigo-50/50 text-indigo-700" : "border-slate-200 text-slate-600 hover:bg-slate-50")}
+                      >
+                        Paystack Gateway
+                      </button>
+                      <button 
+                        type="button"
+                        onClick={() => setPaymentProvider('flutterwave')}
+                        className={cn("p-2 border rounded text-xs font-bold transition-all", paymentProvider === 'flutterwave' ? "border-indigo-600 bg-indigo-50/50 text-indigo-700" : "border-slate-200 text-slate-600 hover:bg-slate-50")}
+                      >
+                        Flutterwave Pay
+                      </button>
+                      <button 
+                        type="button"
+                        onClick={() => setPaymentProvider('hubtel')}
+                        className={cn("p-2 border rounded text-xs font-bold transition-all", paymentProvider === 'hubtel' ? "border-indigo-600 bg-indigo-50/50 text-indigo-700" : "border-slate-200 text-slate-600 hover:bg-slate-50")}
+                      >
+                        Hubtel / MoMo
+                      </button>
+                      <button 
+                        type="button"
+                        onClick={() => setPaymentProvider('momo')}
+                        className={cn("p-2 border rounded text-xs font-bold transition-all", paymentProvider === 'momo' ? "border-indigo-600 bg-indigo-50/50 text-indigo-700" : "border-slate-200 text-slate-600 hover:bg-slate-50")}
+                      >
+                        MTN Mobile Money
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="space-y-1">
+                    <Label className="text-[10px] font-black uppercase tracking-widest text-slate-450">Mobile Billing Phone Number</Label>
+                    <Input 
+                      placeholder="e.g. 0244123456" 
+                      value={checkoutPhone}
+                      onChange={(e) => setCheckoutPhone(e.target.value)}
+                      required
+                      type="tel"
+                      className="font-mono text-sm"
+                    />
+                  </div>
+
+                  <DialogFooter className="pt-4 border-t gap-2">
+                    <Button type="button" variant="ghost" onClick={() => setIsBuyingPack(null)}>Cancel</Button>
+                    {paymentProvider === 'paystack' ? (
+                      <PaystackSMSButton pack={isBuyingPack} disabled={isProcessingCheckout} />
+                    ) : (
+                      <Button type="submit" disabled={isProcessingCheckout} className="bg-indigo-600 hover:bg-indigo-700 font-bold uppercase tracking-wider text-xs">
+                        {isProcessingCheckout 
+                          ? "Launching Checkout Secure Port..." 
+                          : paymentProvider === 'flutterwave'
+                          ? "Pay GHC with Flutterwave"
+                          : `Simulate and Collect with ${paymentProvider.toUpperCase()}`}
+                      </Button>
+                    )}
+                  </DialogFooter>
+                </form>
+              </DialogContent>
+            </Dialog>
+          )}
+        </div>
+      )}
+
+      {/* Tab: Outgoing Logs */}
+      {activeTab === 'logs' && (
+        <Card className="border-slate-200 shadow-sm bg-white overflow-hidden animate-fadeIn">
+          <CardHeader className="bg-slate-50/50 border-b border-slate-100 py-4">
+            <CardTitle className="text-xs font-bold uppercase tracking-wider text-slate-500">Your Dispatched Broadcast Logs</CardTitle>
+          </CardHeader>
+          <CardContent className="p-0">
+            {smsLogs.length === 0 ? (
+              <div className="text-center py-12 text-slate-400 font-bold text-xs uppercase opacity-75 italic">
+                No outbound broadcast logs registered for your user workspace yet.
+              </div>
+            ) : (
               <Table>
-                <TableHeader className="bg-slate-50/50">
+                <TableHeader>
                   <TableRow>
-                    <TableHead className="pl-6 h-10 text-[10px] uppercase font-black">
-                      Sent At
-                    </TableHead>
-                    <TableHead className="h-10 text-[10px] uppercase font-black">
-                      Message Preview
-                    </TableHead>
-                    <TableHead className="h-10 text-[10px] uppercase font-black">
-                      Scope
-                    </TableHead>
-                    <TableHead className="text-right pr-6 h-10 text-[10px] uppercase font-black">
-                      Count
-                    </TableHead>
+                    <TableHead className="pl-6 text-[10px] font-bold uppercase tracking-widest text-slate-400">Date/Time</TableHead>
+                    <TableHead className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Sender Alpha</TableHead>
+                    <TableHead className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Recipients Count</TableHead>
+                    <TableHead className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Credits Deducted</TableHead>
+                    <TableHead className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Dispatched Payload</TableHead>
+                    <TableHead className="text-right pr-6 text-[10px] font-bold uppercase tracking-widest text-slate-400">Transmission Status</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {smsLogs.length === 0 ? (
-                    <TableRow>
-                      <TableCell
-                        colSpan={4}
-                        className="text-center py-12 text-slate-400 italic"
-                      >
-                        No historical broadcasts found.
+                  {smsLogs.map((log) => (
+                    <TableRow key={log.id} className="hover:bg-slate-50/30 transition-colors">
+                      <TableCell className="font-semibold text-slate-800 pl-6 text-[11px]">
+                        {formatTimestamp(log.createdAt)}
+                      </TableCell>
+                      <TableCell className="font-bold text-slate-600">{log.senderId}</TableCell>
+                      <TableCell className="text-slate-900 font-bold">{log.recipients?.length || 1} Destinations</TableCell>
+                      <TableCell className="font-mono text-xs font-bold text-red-650 text-red-600">-{log.smsCount} Credits</TableCell>
+                      <TableCell className="text-xs max-w-sm truncate text-slate-550 font-medium">{log.message}</TableCell>
+                      <TableCell className="text-right pr-6">
+                        <Badge variant="outline" className={log.status === "delivered" ? "bg-emerald-50 text-emerald-700 font-black border-emerald-100 uppercase" : "bg-red-50 text-red-700 font-black border-red-100 uppercase"}>
+                          {log.status}
+                        </Badge>
                       </TableCell>
                     </TableRow>
-                  ) : (
-                    smsLogs.map((log) => (
-                      <TableRow
-                        key={log.id}
-                        className="hover:bg-slate-50/50 transition-colors"
-                      >
-                        <TableCell className="pl-6 text-[10px] font-bold text-slate-400">
-                          {log.sentAt
-                            ? format(log.sentAt.toDate(), "MMM d, h:mm a")
-                            : "Pending"}
-                        </TableCell>
-                        <TableCell className="max-w-xs truncate text-xs font-medium text-slate-700">
-                          {log.message}
-                        </TableCell>
-                        <TableCell>
-                          <span className="text-[9px] font-black uppercase px-2 py-0.5 bg-slate-100 rounded text-slate-600">
-                            {log.branchId === "central" ? "Global" : "Local"}
-                          </span>
-                        </TableCell>
-                        <TableCell className="text-right pr-6 font-black text-indigo-600">
-                          {log.recipientCount}
-                        </TableCell>
-                      </TableRow>
-                    ))
-                  )}
+                  ))}
                 </TableBody>
               </Table>
-            </CardContent>
-          </Card>
-        </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
 
-        <div className="space-y-6">
-          <Card className="border-indigo-100 bg-white shadow-sm overflow-hidden">
-            <CardHeader className="bg-slate-50 border-b border-slate-100 py-4 flex flex-row items-center justify-between">
-              <div>
-                <CardTitle className="text-sm font-black uppercase text-slate-800 tracking-tight flex items-center gap-1.5">
-                  <Smartphone className="w-4 h-4 text-indigo-600" />
-                  SMS Gateways Admin
-                </CardTitle>
-                <CardDescription className="text-[11px]">
-                  Add and assign active custom SMS profiles.
-                </CardDescription>
-              </div>
-              <Dialog open={isConfigModalOpen} onOpenChange={setIsConfigModalOpen}>
-                <DialogTrigger
-                  render={
-                    <Button
-                      onClick={() => {
-                        setEditingConfigId(null);
-                        setConfigForm({
-                          name: "",
-                          provider: "twilio",
-                          apiKey: "",
-                          apiSecret: "",
-                          senderId: "",
-                          customUrl: "",
-                          customMethod: "POST",
-                          customBodyJson: '{\n  "recipient": "{{to}}",\n  "message": "{{message}}",\n  "sender": "{{sender}}"\n}',
-                          customHeadersJson: '{\n  "Content-Type": "application/json"\n}',
-                        });
-                      }}
-                      className="h-8 text-[10px] font-bold uppercase tracking-wider bg-indigo-600 hover:bg-indigo-700 flex items-center gap-1 px-3 rounded-lg text-white"
-                    >
-                      <Plus className="w-3.5 h-3.5" /> Add Profile
-                    </Button>
-                  }
-                />
-                <DialogContent className="sm:max-w-[480px]">
-                  <DialogHeader>
-                    <DialogTitle className="text-base font-black uppercase text-slate-900">
-                      {editingConfigId ? "Edit Gateway Profile" : "New SMS Gateway Profile"}
-                    </DialogTitle>
-                    <DialogDescription className="text-xs">
-                      Configure built-in integration clients (Twilio, Africa's Talking, Mnotify, Arkasel) or save a custom HTTP REST template.
-                    </DialogDescription>
-                  </DialogHeader>
-                  <form onSubmit={handleAddOrUpdateSmsConfig} className="space-y-4 mt-4">
-                    <div className="space-y-1.5">
-                      <Label className="text-[10px] uppercase font-bold text-slate-500">Gateway Profile Name</Label>
-                      <Input
-                        placeholder="e.g. Ghana HQ Primary SMS"
-                        value={configForm.name}
-                        onChange={(e) => setConfigForm({ ...configForm, name: e.target.value })}
-                        required
-                      />
-                    </div>
-                    <div className="space-y-1.5">
-                      <Label className="text-[10px] uppercase font-bold text-slate-500">Provider / Client SDK</Label>
-                      <Select
-                        value={configForm.provider}
-                        onValueChange={(v) => {
-                          let defaultUrl = "";
-                          let defaultBody = "";
-                          let defaultHeaders = '{\n  "Content-Type": "application/json"\n}';
-                          
-                          if (v === "mnotify") {
-                            defaultUrl = "https://api.mnotify.com/v1/sms/quick";
-                            defaultBody = '{\n  "recipient": ["{{to}}"],\n  "sender": "{{sender}}",\n  "message": "{{message}}",\n  "is_schedule": false\n}';
-                          } else if (v === "arkasel") {
-                            defaultUrl = "https://sms.arkasel.com/sms/api?action=send-sms";
-                            defaultBody = ""; // Arkasel typically uses URL queries for GET parameters
-                          } else if (v === "custom") {
-                            defaultUrl = "https://your-custom-gateway.com/api/send";
-                            defaultBody = '{\n  "to": "{{to}}",\n  "msg": "{{message}}",\n  "from": "{{sender}}"\n}';
-                          }
+      {/* Tab: Delivery Reports (Recipient Audits) */}
+      {activeTab === 'reports' && (
+        <div className="space-y-4 animate-fadeIn">
+          <div className="flex flex-col md:flex-row gap-3 justify-between items-start md:items-center">
+            {/* Search Input bar */}
+            <div className="relative w-full md:max-w-xs">
+              <span className="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none text-slate-400">
+                <Search className="w-4 h-4" />
+              </span>
+              <Input 
+                placeholder="Search recipient number..." 
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="pl-9 text-xs"
+              />
+            </div>
 
-                          setConfigForm({ 
-                            ...configForm, 
-                            provider: v,
-                            customUrl: defaultUrl,
-                            customBodyJson: defaultBody,
-                            customHeadersJson: defaultHeaders
-                          });
-                        }}
-                      >
-                        <SelectTrigger className="w-full">
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="twilio">Twilio</SelectItem>
-                          <SelectItem value="africastalking">Africa's Talking</SelectItem>
-                          <SelectItem value="mnotify">Mnotify SMS (Ghana)</SelectItem>
-                          <SelectItem value="arkasel">Arkasel SMS (Ghana)</SelectItem>
-                          <SelectItem value="custom">Generic HTTP REST Webhook</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
+            <Button onClick={exportDeliveryLogsCSV} size="sm" className="bg-slate-900 hover:bg-slate-950 font-bold uppercase tracking-wider text-xs h-9">
+              <Download className="w-3.5 h-3.5 mr-1" /> Export CSV Reports
+            </Button>
+          </div>
 
-                    {configForm.provider === "twilio" && (
-                      <>
-                        <div className="space-y-1.5">
-                          <Label className="text-[10px] uppercase font-bold text-slate-500">Account SID</Label>
-                          <Input
-                            placeholder="ACxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
-                            value={configForm.apiSecret}
-                            onChange={(e) => setConfigForm({ ...configForm, apiSecret: e.target.value })}
-                            required
-                          />
-                        </div>
-                        <div className="space-y-1.5">
-                          <Label className="text-[10px] uppercase font-bold text-slate-500">Auth Token</Label>
-                          <Input
-                            type="password"
-                            placeholder="•••••••••••••••••••••"
-                            value={configForm.apiKey}
-                            onChange={(e) => setConfigForm({ ...configForm, apiKey: e.target.value })}
-                            required
-                          />
-                        </div>
-                        <div className="space-y-1.5">
-                          <Label className="text-[10px] uppercase font-bold text-slate-500">System From Number</Label>
-                          <Input
-                            placeholder="e.g. +14155552671"
-                            value={configForm.senderId}
-                            onChange={(e) => setConfigForm({ ...configForm, senderId: e.target.value })}
-                            required
-                          />
-                        </div>
-                      </>
-                    )}
-
-                    {configForm.provider === "africastalking" && (
-                      <>
-                        <div className="space-y-1.5">
-                          <Label className="text-[10px] uppercase font-bold text-slate-500">Username</Label>
-                          <Input
-                            placeholder="e.g. sandbox or globalchurch"
-                            value={configForm.apiSecret}
-                            onChange={(e) => setConfigForm({ ...configForm, apiSecret: e.target.value })}
-                            required
-                          />
-                        </div>
-                        <div className="space-y-1.5">
-                          <Label className="text-[10px] uppercase font-bold text-slate-500">API Key</Label>
-                          <Input
-                            type="password"
-                            placeholder="•••••••••••••••••••••"
-                            value={configForm.apiKey}
-                            onChange={(e) => setConfigForm({ ...configForm, apiKey: e.target.value })}
-                            required
-                          />
-                        </div>
-                        <div className="space-y-1.5">
-                          <Label className="text-[10px] uppercase font-bold text-slate-500">Sender ID (Alpha tag)</Label>
-                          <Input
-                            placeholder="e.g. ECCLESIA (Optional)"
-                            value={configForm.senderId}
-                            onChange={(e) => setConfigForm({ ...configForm, senderId: e.target.value })}
-                          />
-                        </div>
-                      </>
-                    )}
-
-                    {configForm.provider === "mnotify" && (
-                      <>
-                        <div className="space-y-1.5">
-                          <Label className="text-[10px] uppercase font-bold text-slate-500">mNotify API Key</Label>
-                          <Input
-                            type="password"
-                            placeholder="e.g. mm1234567890abcdef..."
-                            value={configForm.apiKey}
-                            onChange={(e) => setConfigForm({ ...configForm, apiKey: e.target.value })}
-                            required
-                          />
-                          <p className="text-[9px] text-zinc-400">Obtained from portal.mnotify.com developer options.</p>
-                        </div>
-                        <div className="space-y-1.5">
-                          <Label className="text-[10px] uppercase font-bold text-slate-500">Sender ID (Pre-approved)</Label>
-                          <Input
-                            placeholder="e.g. ECCLESIA"
-                            maxLength={11}
-                            value={configForm.senderId}
-                            onChange={(e) => setConfigForm({ ...configForm, senderId: e.target.value })}
-                            required
-                          />
-                          <p className="text-[9px] text-zinc-400">Max 11 alphanumeric characters. Must be whitelisted on mNotify.</p>
-                        </div>
-                      </>
-                    )}
-
-                    {configForm.provider === "arkasel" && (
-                      <>
-                        <div className="space-y-1.5">
-                          <Label className="text-[10px] uppercase font-bold text-slate-500">Arkesel API v2 token (Key)</Label>
-                          <Input
-                            type="password"
-                            placeholder="e.g. ark_token_..."
-                            value={configForm.apiKey}
-                            onChange={(e) => setConfigForm({ ...configForm, apiKey: e.target.value })}
-                            required
-                          />
-                          <p className="text-[9px] text-zinc-400">Grab from Arkasel API dashboard integration section.</p>
-                        </div>
-                        <div className="space-y-1.5">
-                          <Label className="text-[10px] uppercase font-bold text-slate-500">Approved Sender ID</Label>
-                          <Input
-                            placeholder="e.g. ECCLESIA"
-                            maxLength={11}
-                            value={configForm.senderId}
-                            onChange={(e) => setConfigForm({ ...configForm, senderId: e.target.value })}
-                            required
-                          />
-                          <p className="text-[9px] text-amber-600 font-medium">This must be registered and approved on Arkesel.</p>
-                        </div>
-
-                        <div className="p-3 bg-amber-50/70 border border-amber-200/60 rounded-lg text-[10px] text-amber-900 space-y-1.5 mt-2">
-                          <p className="font-semibold text-amber-800 flex items-center gap-1.5">
-                            <span>⚠️</span> Credit Deducted but SMS Not Delivered?
-                          </p>
-                          <p className="text-zinc-600 leading-normal">
-                            If Arkesel successfully charges credits but the messages are not received on live devices, please verify the following:
-                          </p>
-                          <ul className="list-disc pl-4 space-y-1 text-zinc-600 leading-normal">
-                            <li>
-                              <strong className="text-zinc-800">Sender ID Whitelisting:</strong> In Ghana, you cannot use any Sender ID until it is registered and explicitly approved on your Arkesel Portal. Releasing messages with unregistered names will deduct credit at submission but fail at the carrier level.
-                            </li>
-                            <li>
-                              <strong className="text-zinc-800">Do-Not-Disturb (DND):</strong> If a recipient phone number has DND configuration active (common on MTN and Telecel), the carriers reject delivery. You will still be charged for the routing resources.
-                            </li>
-                            <li>
-                              <strong className="text-zinc-800">KYC Status:</strong> Telecommunications regulations require a fully validated and approved Arkesel customer identity profile before routing live traffic.
-                            </li>
-                          </ul>
-                        </div>
-                      </>
-                    )}
-
-                    {configForm.provider === "custom" && (
-                      <>
-                        <div className="space-y-1.5">
-                          <Label className="text-[10px] uppercase font-bold text-slate-500">Endpoint Webhook API URL</Label>
-                          <Input
-                            placeholder="e.g. https://api.mysmsengine.com/send"
-                            type="url"
-                            value={configForm.customUrl}
-                            onChange={(e) => setConfigForm({ ...configForm, customUrl: e.target.value })}
-                            required
-                          />
-                        </div>
-                        <div className="grid grid-cols-2 gap-3">
-                          <div className="space-y-1.5">
-                            <Label className="text-[10px] uppercase font-bold text-slate-500">HTTP Method</Label>
-                            <Select
-                              value={configForm.customMethod}
-                              onValueChange={(v) => setConfigForm({ ...configForm, customMethod: v })}
-                            >
-                              <SelectTrigger className="w-full">
-                                <SelectValue />
-                              </SelectTrigger>
-                              <SelectContent>
-                                <SelectItem value="POST">POST (JSON Body)</SelectItem>
-                                <SelectItem value="GET">GET (Query Params)</SelectItem>
-                              </SelectContent>
-                            </Select>
-                          </div>
-                          <div className="space-y-1.5">
-                            <Label className="text-[10px] uppercase font-bold text-slate-500">API Secret Key (Optional)</Label>
-                            <Input
-                              type="password"
-                              placeholder="For authorization headers"
-                              value={configForm.apiKey}
-                              onChange={(e) => setConfigForm({ ...configForm, apiKey: e.target.value })}
-                            />
-                          </div>
-                        </div>
-                        <div className="space-y-1.5">
-                          <Label className="text-[10px] uppercase font-bold text-slate-500">Required Headers (JSON)</Label>
-                          <textarea
-                            className="w-full min-h-[50px] font-mono text-[10px] p-2 border rounded-md"
-                            value={configForm.customHeadersJson}
-                            onChange={(e) => setConfigForm({ ...configForm, customHeadersJson: e.target.value })}
-                          />
-                        </div>
-                        <div className="space-y-1.5">
-                          <Label className="text-[10px] uppercase font-bold text-slate-500">Request Body Template / Template Map</Label>
-                          <textarea
-                            className="w-full min-h-[70px] font-mono text-[10px] p-2 border rounded-md"
-                            value={configForm.customBodyJson}
-                            onChange={(e) => setConfigForm({ ...configForm, customBodyJson: e.target.value })}
-                          />
-                          <p className="text-[8px] text-rose-500 font-bold mt-1 leading-normal">
-                            Interpolates: {"{{to}}"} (phone number), {"{{message}}"} (URLencoded text), {"{{sender}}"} (SenderID)
-                          </p>
-                        </div>
-                      </>
-                    )}
-
-                    <DialogFooter className="pt-2">
-                      <Button
-                        type="submit"
-                        className="w-full bg-indigo-600 hover:bg-slate-900 font-bold uppercase tracking-wider text-xs h-11 text-white"
-                      >
-                        {editingConfigId ? "Update Configuration" : "Save Connection Profile"}
-                      </Button>
-                    </DialogFooter>
-                  </form>
-                </DialogContent>
-              </Dialog>
+          <Card className="border-slate-200 shadow-sm bg-white overflow-hidden">
+            <CardHeader className="bg-slate-50/50 border-b border-slate-100 py-3 flex justify-between">
+              <CardTitle className="text-xs font-bold uppercase tracking-wider text-slate-600">Individual Recipient Auditing reports</CardTitle>
             </CardHeader>
-            <CardContent className="p-4 space-y-4">
-              <div className="text-[10px] uppercase font-black text-slate-400 tracking-wider">
-                Saved Connections
-              </div>
-              {smsConfigsList.length === 0 ? (
-                <div className="text-center py-6 text-slate-400 italic text-xs border border-dashed rounded-xl border-slate-205">
-                  No SMS Gateway profiles created yet. Use 'Add Profile' to link one.
-                </div>
+            <CardContent className="p-0">
+              {filteredReports.length === 0 ? (
+                <div className="text-center py-10 text-slate-400 text-xs italic">No matching recipient logs captured.</div>
               ) : (
-                <div className="space-y-3">
-                  {smsConfigsList.map((c) => {
-                    const isPastor = profile?.role === "pastor";
-                    const activeLink = isPastor
-                      ? profile?.staffData?.assignedBranchId || "central"
-                      : "central";
-                    const isLinkedToMe = c.branchId === activeLink;
-
-                    // Try to look up linked branch name if it's connected to a branch
-                    let linkLabel = "Draft / Unlinked";
-                    if (c.branchId === "central") {
-                      linkLabel = "Linked: HQ Broadcast";
-                    } else if (c.branchId && c.branchId !== "unlinked") {
-                      const b = branches.find((branch) => branch.id === c.branchId);
-                      linkLabel = `Linked: ${b ? b.name : c.branchId}`;
-                    }
-
-                    return (
-                      <div
-                        key={c.id}
-                        className={cn(
-                          "p-3.5 rounded-xl border transition-all flex flex-col gap-2.5",
-                          isLinkedToMe
-                            ? "border-emerald-200 bg-emerald-50/15"
-                            : "border-slate-100 bg-slate-50/50 hover:bg-white hover:border-slate-200",
-                        )}
-                      >
-                        <div className="flex items-center justify-between">
-                          <div className="space-y-0.5">
-                            <div className="font-bold text-xs text-slate-800 flex items-center gap-1.5">
-                              {c.name}
-                              {isLinkedToMe && (
-                                <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
-                              )}
-                            </div>
-                            <div className="flex gap-2 items-center text-[9px] font-bold uppercase text-slate-400">
-                              <span className="px-1.5 py-0.2 bg-slate-100 text-slate-500 rounded font-mono">
-                                {c.provider}
-                              </span>
-                              <span>
-                                Sender:{" "}
-                                <strong className="font-mono text-slate-650">
-                                  {c.senderId || "N/A"}
-                                </strong>
-                              </span>
-                            </div>
-                          </div>
-
-                          <span
-                            className={cn(
-                              "text-[8px] font-black uppercase px-2 py-0.5 rounded-full tracking-wider",
-                              isLinkedToMe
-                                ? "bg-emerald-100 text-emerald-800"
-                                : "bg-slate-200 text-slate-600",
-                            )}
-                          >
-                            {linkLabel}
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead className="pl-6 text-[10px] font-bold uppercase tracking-widest text-slate-400">Recipient Mobile</TableHead>
+                      <TableHead className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Sent Payload Message</TableHead>
+                      <TableHead className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Delivery Status</TableHead>
+                      <TableHead className="text-right pr-6 text-[10px] font-bold uppercase tracking-widest text-slate-400">Transmission Time</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {filteredReports.map((rep) => (
+                      <TableRow key={rep.id}>
+                        <TableCell className="font-mono text-xs font-bold pl-6 text-slate-900">{rep.recipient}</TableCell>
+                        <TableCell className="text-xs text-slate-600 max-w-xs truncate font-medium">{rep.message}</TableCell>
+                        <TableCell>
+                          <span className="inline-flex items-center gap-1 text-[10px] font-black uppercase text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-100">
+                            <CheckCircle2 className="w-3" /> {rep.status}
                           </span>
-                        </div>
-
-                        <div className="flex items-center justify-between pt-1 border-t border-slate-100/60 font-medium">
-                          <div className="flex gap-1">
-                            <Button
-                              type="button"
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => {
-                                setEditingConfigId(c.id);
-                                setConfigForm({
-                                  name: c.name || "Unnamed Gateway",
-                                  provider: c.provider || "twilio",
-                                  apiKey: c.apiKey || "",
-                                  apiSecret: c.apiSecret || "",
-                                  senderId: c.senderId || "",
-                                  customUrl: c.customUrl || "",
-                                  customMethod: c.customMethod || "POST",
-                                  customBodyJson: c.customBodyJson || '{\n  "recipient": "{{to}}",\n  "message": "{{message}}",\n  "sender": "{{sender}}"\n}',
-                                  customHeadersJson: c.customHeadersJson || '{\n  "Content-Type": "application/json"\n}',
-                                });
-                                setIsConfigModalOpen(true);
-                              }}
-                              className="h-7 w-7 p-0 text-slate-400 hover:text-slate-700"
-                            >
-                              <Edit3 className="w-3.5 h-3.5" />
-                            </Button>
-                            <Button
-                              type="button"
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => handleDeleteConfig(c.id)}
-                              className="h-7 w-7 p-0 text-red-400 hover:text-red-700 hover:bg-red-50"
-                            >
-                              <Trash2 className="w-3.5 h-3.5" />
-                            </Button>
-                            {(c.provider === "arkasel" || c.provider === "arkesel") && (
-                              <Button
-                                type="button"
-                                variant="ghost"
-                                size="sm"
-                                onClick={() => handleOpenTestModal(c)}
-                                className="h-7 px-2 text-[10px] text-indigo-600 hover:text-indigo-800 font-bold hover:bg-indigo-50/50 flex items-center gap-1 rounded"
-                                title="Run manual connectivity and delivery tracer diagnostics for Arkesel"
-                              >
-                                <Smartphone className="w-3.5 h-3.5 text-indigo-600 animate-pulse" /> Test API Connection
-                              </Button>
-                            )}
-                          </div>
-
-                          {isLinkedToMe ? (
-                            <Button
-                              type="button"
-                              variant="outline"
-                              size="sm"
-                              onClick={() => handleUnlinkConfig(c.id)}
-                              className="h-7 text-[9px] font-bold uppercase tracking-wider text-slate-500 hover:bg-slate-100 py-0 px-2 gap-1 rounded border-slate-200"
-                            >
-                              <Unlink className="w-3 h-3 text-slate-400" /> Unlink
-                            </Button>
-                          ) : (
-                            <Button
-                              type="button"
-                              onClick={() => handleLinkConfig(c.id)}
-                              className="h-7 text-[9px] font-bold uppercase tracking-wider bg-indigo-600 hover:bg-indigo-700 text-white py-0 px-2.5 gap-1 rounded"
-                            >
-                              <Link2 className="w-3.5 h-3.5 shrink-0" /> Link/Activate
-                            </Button>
-                          )}
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
+                        </TableCell>
+                        <TableCell className="text-right pr-6 text-slate-400 text-[10px] font-bold">{formatTimestamp(rep.sentAt)}</TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
               )}
             </CardContent>
           </Card>
-
-          <div className="p-5 bg-white border border-slate-200 rounded-2xl">
-            <div className="flex items-center gap-3 mb-4">
-              <Target className="w-5 h-5 text-indigo-600" />
-              <h4 className="text-sm font-black uppercase tracking-tight">Messaging Tips</h4>
-            </div>
-            <div className="space-y-3">
-              <div className="flex gap-2">
-                <div className="w-1.5 h-1.5 bg-indigo-200 rounded-full mt-1.5 shrink-0"></div>
-                <p className="text-[11px] text-slate-500 leading-snug">
-                  Multiple configurations allow you to configure independent keys for specific branches
-                  or sub-ministries.
-                </p>
-              </div>
-              <div className="flex gap-2">
-                <div className="w-1.5 h-1.5 bg-indigo-200 rounded-full mt-1.5 shrink-0"></div>
-                <p className="text-[11px] text-slate-500 leading-snug">
-                  Simply click <span className="font-bold text-indigo-600">Link/Activate</span> to link any
-                  credential profile to your current level instantly.
-                </p>
-              </div>
-              <div className="flex gap-2">
-                <div className="w-1.5 h-1.5 bg-indigo-200 rounded-full mt-1.5 shrink-0"></div>
-                <p className="text-[11px] text-slate-500 leading-snug">
-                  Keep messages under <span className="font-bold text-slate-900">160 characters</span> to
-                  avoid multi-page billing.
-                </p>
-              </div>
-            </div>
-          </div>
         </div>
-      </div>
+      )}
 
-      {/* Arkesel Connectivity Diagnostic Modal */}
-      <Dialog open={isTestModalOpen} onOpenChange={setIsTestModalOpen}>
-        <DialogContent className="max-w-2xl bg-white rounded-2xl shadow-xl overflow-hidden border border-slate-100 p-0">
-          <DialogHeader className="bg-slate-50 border-b border-zinc-100 px-6 py-4">
-            <DialogTitle className="text-sm font-black uppercase text-indigo-950 flex items-center gap-2">
-              <Smartphone className="w-4 h-4 text-indigo-600" />
-              Arkesel v2 API Diagnostics Suite
-            </DialogTitle>
-            <DialogDescription className="text-xs">
-              Manually test endpoint routing, format validation, and trace cellular carrier response logs for <strong>{testSelectedConfig?.name}</strong>.
-            </DialogDescription>
-          </DialogHeader>
-
-          <div className="p-6 space-y-5 max-h-[70vh] overflow-y-auto">
-            {/* Parameters Overview */}
-            <div className="grid grid-cols-2 gap-4 p-3.5 bg-slate-50 border border-slate-100/90 rounded-xl text-xs">
-              <div>
-                <span className="block text-[10px] uppercase font-black tracking-wider text-slate-400 mb-0.5">Integration Token (v2 Key)</span>
-                <code className="text-[11px] font-mono text-indigo-800">
-                  {testSelectedConfig?.apiKey ? (
-                    testSelectedConfig.apiKey.length > 8 
-                      ? `${testSelectedConfig.apiKey.substring(0, 4)}......${testSelectedConfig.apiKey.substring(testSelectedConfig.apiKey.length - 4)}` 
-                      : "****"
-                  ) : "Missing"}
-                </code>
-              </div>
-              <div>
-                <span className="block text-[10px] uppercase font-black tracking-wider text-slate-400 mb-0.5">Target Provider</span>
-                <span className="font-semibold uppercase text-slate-700 font-mono text-[11px]">{testSelectedConfig?.provider}</span>
-              </div>
-            </div>
-
-            {/* Test Arguments Input form */}
-            <div className="space-y-4">
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-1.5">
-                  <Label className="text-[10px] uppercase font-black text-slate-650">Approved Sender ID (Ghana Carriers)</Label>
-                  <Input
-                    placeholder="e.g. ECCLESIA"
-                    maxLength={11}
-                    value={testSenderId}
-                    onChange={(e) => setTestSenderId(e.target.value)}
-                  />
-                  <p className="text-[10px] text-zinc-400 leading-normal">
-                    Must match an approved, whitelisted Sender ID on your Arkesel dashboard. letters/numbers only, max 11 chars.
-                  </p>
+      {/* Tab: Message Templates Assist */}
+      {activeTab === 'templates' && (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 animate-fadeIn">
+          {templates.map((tpl) => (
+            <Card key={tpl.id} className="border-slate-200 shadow-sm hover:shadow-md transition-all flex flex-col justify-between bg-white h-full">
+              <CardHeader className="pb-3 border-b bg-slate-50/30">
+                <div className="flex justify-between items-center">
+                  <Badge variant="outline" className="bg-indigo-50 text-indigo-700 border-indigo-100 font-bold text-[9px] uppercase tracking-wider">{tpl.category}</Badge>
                 </div>
-
-                <div className="space-y-1.5">
-                  <Label className="text-[10px] uppercase font-black text-slate-655">Test Recipient Phone #</Label>
-                  <Input
-                    placeholder="e.g. 0241234567 or 233241234567"
-                    value={testRecipient}
-                    onChange={(e) => setTestRecipient(e.target.value)}
-                    required
-                  />
-                  <p className="text-[10px] text-zinc-400 leading-normal">
-                    Enter the phone number of a test device to receive the connectivity diagnostic SMS.
-                  </p>
-                </div>
-              </div>
-
-              <div className="space-y-1.5">
-                <Label className="text-[10px] uppercase font-black text-slate-655">Test Message Payload</Label>
-                <textarea
-                  className="w-full text-xs p-3 border rounded-xl font-mono focus:ring-1 focus:ring-indigo-500 focus:outline-none"
-                  rows={2}
-                  maxLength={160}
-                  value={testMessage}
-                  onChange={(e) => setTestMessage(e.target.value)}
-                  placeholder="Type a custom query text..."
-                />
-                <div className="flex justify-between items-center text-[10px] text-slate-400 font-semibold">
-                  <span>Standard 1-page limits is 160 characters</span>
-                  <span>{testMessage.length}/160</span>
-                </div>
-              </div>
-            </div>
-
-            {/* Execution Trace */}
-            {testLogs.length > 0 && (
-              <div className="space-y-2.5">
-                <Label className="text-[10px] uppercase font-black text-slate-500 flex items-center gap-1.5">
-                  <span className="inline-block w-2 h-2 rounded-full bg-indigo-550 animate-pulse"></span>
-                  Chronological Diagnostic Execution Log
-                </Label>
-                <div className="p-3 bg-zinc-950 rounded-xl font-mono text-[11px] text-zinc-300 space-y-2 border border-zinc-900 max-h-[160px] overflow-y-auto">
-                  {testLogs.map((log, idx) => {
-                    const statusColors = {
-                      info: "text-blue-400",
-                      success: "text-emerald-400 font-semibold",
-                      warning: "text-amber-400 font-semibold",
-                      error: "text-rose-400 font-bold"
-                    }[log.status as "info" | "success" | "warning" | "error"] || "text-zinc-400";
-
-                    const icon = {
-                      info: "ℹ️",
-                      success: "✅",
-                      warning: "⚠️",
-                      error: "❌"
-                    }[log.status as "info" | "success" | "warning" | "error"] || "•";
-
-                    return (
-                      <div key={idx} className="leading-snug">
-                        <span className="text-zinc-500">[{idx+1}]</span>{" "}
-                        <span className={statusColors}>{icon} {log.step}:</span>{" "}
-                        <span className="text-zinc-200">{log.message}</span>
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-            )}
-
-            {/* AI Diagnosis Summary */}
-            {testDiagnosis && (
-              <div className={cn(
-                "p-4 border rounded-xl space-y-2 text-left",
-                testSuccess 
-                  ? "bg-emerald-50/20 border-emerald-200/50 text-emerald-950" 
-                  : "bg-amber-50/20 border-amber-200/50 text-amber-950"
-              )}>
-                <h4 className="text-xs font-black uppercase tracking-tight flex items-center gap-1.5">
-                  {testSuccess ? (
-                    <span className="px-1.5 py-0.5 bg-emerald-100 text-emerald-800 rounded font-bold">INFO PASSED</span>
-                  ) : (
-                    <span className="px-1.5 py-0.5 bg-rose-100 text-rose-800 rounded font-bold">DIAGNOSTICS TRIGGERED</span>
-                  )}
-                  Diagnostic Findings Summary
-                </h4>
-                <div className="text-[11px] leading-relaxed whitespace-pre-line text-slate-700 font-medium">
-                  {testDiagnosis}
-                </div>
-              </div>
-            )}
-          </div>
-
-          <DialogFooter className="bg-slate-50 border-t border-zinc-100 px-6 py-4 flex items-center justify-between sm:justify-between">
-            <Button
-              type="button"
-              variant="outline"
-              disabled={testRunning}
-              onClick={() => setIsTestModalOpen(false)}
-              className="px-4 text-xs font-semibold hover:bg-white border-slate-200"
-            >
-              Close Diagnostic Suite
-            </Button>
-            <Button
-              type="button"
-              disabled={testRunning}
-              onClick={handleRunConnectivityTest}
-              className="bg-indigo-600 hover:bg-zinc-900 text-white px-5 text-xs font-bold uppercase tracking-wider h-10 shrink-0"
-            >
-              {testRunning ? "Spawning Trace..." : "Run Connectivity Diagnostic"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+                <CardTitle className="text-sm font-black text-slate-800 uppercase mt-2 tracking-tight">{tpl.name}</CardTitle>
+              </CardHeader>
+              <CardContent className="p-5 flex-1 flex flex-col justify-between space-y-4">
+                <p className="text-xs text-slate-550 italic leading-relaxed font-semibold text-slate-600 flex-1">
+                  "{tpl.content}"
+                </p>
+                <Button 
+                  onClick={() => copyTemplate(tpl.content)}
+                  variant="outline" 
+                  className="w-full text-xs font-bold uppercase tracking-wider h-9"
+                >
+                  Apply content copy
+                </Button>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

@@ -156,6 +156,34 @@ service cloud.firestore {
       allow delete: if isSignedIn() && belongsToTenant(resource.data.tenantId);
     }
 
+    // --- SMS Credit Reseller Collections ---
+    match /gateway_settings/{settingId} {
+      allow read, write: if isSuperAdmin();
+    }
+
+    match /sms_packages/{packageId} {
+      allow read, list: if isSignedIn();
+      allow write: if isSuperAdmin();
+    }
+
+    match /sms_transactions/{transactionId} {
+      allow read, list: if isSignedIn() && (resource.data.userId == request.auth.uid || isSuperAdmin());
+      allow create: if isSignedIn() && (request.resource.data.userId == request.auth.uid || isSuperAdmin());
+      allow update, delete: if isSuperAdmin();
+    }
+
+    match /wallet_transactions/{transactionId} {
+      allow read, list: if isSignedIn() && (resource.data.userId == request.auth.uid || isSuperAdmin());
+      allow create: if isSuperAdmin(); // Wallets can only be charged server-side or via admin
+      allow update, delete: if isSuperAdmin();
+    }
+
+    match /delivery_reports/{reportId} {
+      allow read, list: if isSignedIn() && (resource.data.userId == request.auth.uid || isSuperAdmin());
+      allow create: if isSignedIn() && (request.resource.data.userId == request.auth.uid || isSuperAdmin());
+      allow update, delete: if isSuperAdmin();
+    }
+
     // 17. Groups Collection
     match /groups/{groupId} {
       allow get, list: if isSignedIn() && belongsToTenant(resource.data.tenantId);
