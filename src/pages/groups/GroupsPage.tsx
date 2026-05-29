@@ -19,11 +19,16 @@ export default function GroupsPage() {
   const { profile } = useAuth();
   const { effectiveTenantId } = useTenant();
   const [groups, setGroups] = useState<any[]>([]);
+  const [branches, setBranches] = useState<any[]>([]);
+  const [staff, setStaff] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingGroup, setEditingGroup] = useState<any>(null);
   const [searchQuery, setSearchQuery] = useState('');
   
+  const userRole = profile?.role || profile?.staffData?.role || '';
+  const userBranchId = profile?.staffData?.assignedBranchId || '';
+
   const [formData, setFormData] = useState({
     name: '',
     description: '',
@@ -38,15 +43,23 @@ export default function GroupsPage() {
     { value: 'other', label: 'Other' },
   ];
 
+  // Pre-set branchId for pastors
+  useEffect(() => {
+    if (userRole === 'pastor' && userBranchId) {
+      setFormData(prev => ({ ...prev, branchId: userBranchId }));
+    }
+  }, [userRole, userBranchId]);
+
   useEffect(() => {
     if (!effectiveTenantId) return;
 
+    // Fetch groups
     const q = query(
       collection(db, 'groups'),
       where('tenantId', '==', effectiveTenantId)
     );
 
-    const unsubscribe = onSnapshot(q, (snapshot) => {
+    const unsubscribeGroups = onSnapshot(q, (snapshot) => {
       const groupData = snapshot.docs.map(doc => ({
         id: doc.id,
         ...doc.data()
@@ -59,7 +72,29 @@ export default function GroupsPage() {
       setLoading(false);
     });
 
-    return () => unsubscribe();
+    // Fetch branches
+    const bQuery = query(
+      collection(db, 'branches'),
+      where('tenantId', '==', effectiveTenantId)
+    );
+    const unsubscribeBranches = onSnapshot(bQuery, (snapshot) => {
+      setBranches(snapshot.docs.map(d => ({ id: d.id, ...d.data() })));
+    });
+
+    // Fetch staff
+    const sQuery = query(
+      collection(db, 'staff'),
+      where('tenantId', '==', effectiveTenantId)
+    );
+    const unsubscribeStaff = onSnapshot(sQuery, (snapshot) => {
+      setStaff(snapshot.docs.map(d => ({ id: d.id, ...d.data() })));
+    });
+
+    return () => {
+      unsubscribeGroups();
+      unsubscribeBranches();
+      unsubscribeStaff();
+    };
   }, [effectiveTenantId]);
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -115,14 +150,20 @@ export default function GroupsPage() {
       name: '',
       description: '',
       category: 'ministry',
-      branchId: 'all',
+      branchId: userRole === 'pastor' && userBranchId ? userBranchId : 'all',
     });
   };
 
-  const filteredGroups = groups.filter(g => 
-    g.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    g.category.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  const filteredGroups = groups.filter(g => {
+    // Branch filter for pastors
+    if (userRole === 'pastor' && userBranchId) {
+      if (g.branchId !== 'all' && g.branchId !== userBranchId) {
+        return false;
+      }
+    }
+    return g.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      g.category.toLowerCase().includes(searchQuery.toLowerCase());
+  });
 
   return (
     <div className="space-y-6">
@@ -174,15 +215,23 @@ export default function GroupsPage() {
                 </div>
                 <div className="space-y-2">
                   <Label className="text-[10px] font-black uppercase tracking-widest text-slate-500">Branch Exposure</Label>
-                  <Select value={formData.branchId} onValueChange={v => setFormData({...formData, branchId: v})}>
-                    <SelectTrigger className="h-11 border-slate-200">
-                      <SelectValue placeholder="Select Branch" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">Global (All Branches)</SelectItem>
-                      {/* Branch list could be fetched but 'all' is a good default */}
-                    </SelectContent>
-                  </Select>
+                  {userRole === 'pastor' && userBranchId ? (
+                    <div className="h-11 border border-slate-200 rounded-md bg-slate-50 flex items-center px-3 text-xs font-semibold text-slate-600">
+                      {branches.find(b => b.id === userBranchId)?.name || 'Local Branch'} (Restricted to Branch)
+                    </div>
+                  ) : (
+                    <Select value={formData.branchId} onValueChange={v => setFormData({...formData, branchId: v})}>
+                      <SelectTrigger className="h-11 border-slate-200">
+                        <SelectValue placeholder="Select Branch" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">Global (All Branches)</SelectItem>
+                        {branches.map(b => (
+                          <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  )}
                 </div>
               </div>
               <div className="space-y-2">
@@ -225,7 +274,8 @@ export default function GroupsPage() {
               <TableRow>
                 <TableHead className="text-[10px] font-black uppercase tracking-widest text-slate-500">Group Name</TableHead>
                 <TableHead className="text-[10px] font-black uppercase tracking-widest text-slate-500">Category</TableHead>
-                <TableHead className="text-[10px] font-black uppercase tracking-widest text-slate-500">Branch</TableHead>
+                <TableHead className="text-[10px] font-black uppercase tracking-widest text-slate-500">Branch Exposure</TableHead>
+                <TableHead className="text-[10px] font-black uppercase tracking-widest text-slate-500">Group Representative / Leader</TableHead>
                 <TableHead className="text-[10px] font-black uppercase tracking-widest text-slate-500">Description</TableHead>
                 <TableHead className="text-[10px] font-black uppercase tracking-widest text-slate-500 text-right">Actions</TableHead>
               </TableRow>
@@ -233,11 +283,11 @@ export default function GroupsPage() {
             <TableBody>
               {loading ? (
                 <TableRow>
-                  <TableCell colSpan={5} className="h-32 text-center text-slate-400">Loading groups...</TableCell>
+                  <TableCell colSpan={6} className="h-32 text-center text-slate-400">Loading groups...</TableCell>
                 </TableRow>
               ) : filteredGroups.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={5} className="h-32 text-center text-slate-400">No groups found.</TableCell>
+                  <TableCell colSpan={6} className="h-32 text-center text-slate-400">No groups found.</TableCell>
                 </TableRow>
               ) : (
                 filteredGroups.map((group) => (
@@ -255,14 +305,36 @@ export default function GroupsPage() {
                         {group.category}
                       </Badge>
                     </TableCell>
-                    <TableCell className="text-sm text-slate-500">
-                      {group.branchId === 'all' ? 'All Branches' : 'Specific Branch'}
+                    <TableCell className="text-sm font-medium text-slate-500">
+                      {group.branchId === 'all' ? (
+                        <Badge variant="secondary" className="bg-slate-100 text-[10px] font-bold">Global</Badge>
+                      ) : (
+                        branches.find(b => b.id === group.branchId)?.name || 'Local Branch'
+                      )}
+                    </TableCell>
+                    <TableCell className="text-sm font-medium">
+                      {(() => {
+                        const leader = staff.find(s => 
+                          (s.department?.toLowerCase() === group.name?.toLowerCase()) ||
+                          (s.responsibility === 'group_president' && s.department?.toLowerCase() === group.name?.toLowerCase())
+                        );
+                        if (leader) {
+                          return (
+                            <div className="flex items-center gap-1.5 bg-emerald-50/50 border border-emerald-100 rounded-full px-2.5 py-1 text-xs text-emerald-700 w-fit">
+                              <Shield className="w-3.5 h-3.5 text-emerald-600" />
+                              <span className="font-bold">{leader.firstName} {leader.lastName}</span>
+                              <span className="text-[10px] text-emerald-500 font-semibold italic ml-0.5">({leader.position || 'Leader'})</span>
+                            </div>
+                          );
+                        }
+                        return <span className="text-slate-400 text-xs italic">Unassigned</span>;
+                      })()}
                     </TableCell>
                     <TableCell className="text-sm text-slate-500 max-w-xs truncate">
                       {group.description || 'No description'}
                     </TableCell>
                     <TableCell className="text-right">
-                      <div className="flex items-center justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                      <div className="flex items-center justify-end gap-1 opacity-100 sm:opacity-0 group-hover:opacity-100 transition-opacity">
                         <Button variant="ghost" size="icon" className="h-8 w-8 text-slate-400 hover:text-indigo-600" onClick={() => handleEdit(group)}>
                           <Edit2 className="w-3.5 h-3.5" />
                         </Button>

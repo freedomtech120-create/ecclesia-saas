@@ -44,11 +44,11 @@ service cloud.firestore {
     match /users/{userId} {
       allow get: if isSignedIn() && (request.auth.uid == userId || isSuperAdmin() || belongsToTenant(resource.data.tenantId));
       allow list: if isSignedIn() && (isSuperAdmin() || belongsToTenant(resource.data.tenantId));
-      allow create: if isSignedIn() && request.auth.uid == userId;
+      allow create: if isSignedIn() && (request.auth.uid == userId || isSuperAdmin() || ((isAdmin() || isPastor()) && belongsToTenant(request.resource.data.tenantId)));
       allow update: if isSignedIn() && (
         (request.auth.uid == userId && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['role', 'tenantId'])) ||
         isSuperAdmin() ||
-        (isAdmin() && belongsToTenant(resource.data.tenantId) && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['tenantId']))
+        ((isAdmin() || isPastor()) && belongsToTenant(resource.data.tenantId) && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['tenantId']))
       );
     }
 
@@ -79,7 +79,7 @@ service cloud.firestore {
     // 5. Staff Collection
     match /staff/{staffId} {
       allow get, list: if isSignedIn() && (belongsToTenant(resource.data.tenantId) || resource.data.email == request.auth.token.email);
-      allow create, update, delete: if isAdmin() && belongsToTenant(request.resource.data.tenantId);
+      allow create, update, delete: if (isAdmin() || isPastor()) && belongsToTenant(request.resource.data.tenantId);
     }
 
     // 6. Finances Collection
@@ -118,7 +118,7 @@ service cloud.firestore {
     // 11. Staff Claims
     match /staff_claims/{email} {
       allow get: if true;
-      allow write: if isAdmin();
+      allow write: if isAdmin() || isPastor();
     }
 
     // 12. Public Forms

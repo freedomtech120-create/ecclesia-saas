@@ -27,7 +27,8 @@ export function DashboardLayout() {
     { label: 'Members', icon: Users, href: '/dashboard/members', roles: ['church-admin', 'pastor', 'worker', 'super-admin'] },
     { label: 'Member Transfers', icon: ArrowLeftRight, href: '/dashboard/transfers', roles: ['super-admin', 'church-admin', 'pastor'] },
     { label: 'Groups & Ministries', icon: Layers, href: '/dashboard/groups', roles: ['church-admin', 'pastor', 'super-admin'] },
-    { label: 'Staff & Pastors', icon: Briefcase, href: '/dashboard/staff', roles: ['church-admin', 'super-admin'] },
+    { label: 'Staff & Pastors', icon: Briefcase, href: '/dashboard/staff', roles: ['church-admin', 'pastor', 'super-admin'] },
+    { label: 'National Panel', icon: Shield, href: '/dashboard/national-admin', roles: ['church-admin', 'super-admin', 'national_executive'] },
     { label: 'Bulk Communications', icon: MessageSquare, href: '/dashboard/communications', roles: ['church-admin', 'pastor', 'super-admin'] },
   ];
 
@@ -340,5 +341,6 @@ const navItems = [
   { label: 'Communications', icon: MessageSquare, href: '/dashboard/communications' },
   { label: 'Notifications', icon: Bell, href: '/dashboard/notifications' },
   { label: 'Settings', icon: Settings, href: '/dashboard/settings' },
+  { label: 'National Panel', icon: Shield, href: '/dashboard/national-admin' },
   { label: 'Global Panel', icon: Shield, href: '/admin' },
 ];

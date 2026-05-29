@@ -31,6 +31,7 @@ import EventsPage from './pages/events/EventsPage';
 import NotificationCenterPage from './pages/notifications/NotificationCenterPage';
 
 import AdminPanel from './pages/admin/AdminPanel';
+import NationalAdminPage from './pages/admin/NationalAdminPage';
 
 const LoginPage = () => (
   <div className="flex items-center justify-center min-h-screen bg-slate-50 p-4 font-sans">
@@ -320,6 +321,7 @@ export default function App() {
               <Route path="events" element={<EventsPage />} />
               <Route path="settings" element={<SettingsPage />} />
               <Route path="notifications" element={<NotificationCenterPage />} />
+              <Route path="national-admin" element={<NationalAdminPage />} />
             </Route>
 
             <Route path="/admin" element={
